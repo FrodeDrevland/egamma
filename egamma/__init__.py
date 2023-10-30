@@ -1,2 +1,2 @@
-from .core import *
-from .tpe import *
+from . core import *
+from . dist import EgammaDistribution
