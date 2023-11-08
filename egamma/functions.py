@@ -1,7 +1,8 @@
 import random
-import statistics as stat
-import scipy.special as sc
+from scipy.special import gammainc
+from scipy.special import gammaincinv
 from scipy.stats import gamma
+from scipy.stats import skew
 import numpy as np
 
 
@@ -15,17 +16,17 @@ def pdf(x, alpha, beta=1.0, delta=0.0):
 # Cumulative distribution function
 def cdf(x, alpha, beta=1.0, delta=0.0):
     if beta > 0:
-        return sc.gammainc(alpha, (x - delta) / beta)
+        return gammainc(alpha, (x - delta) / beta)
     else:
-        return 1 - sc.gammainc(alpha, (x - delta) / beta)
+        return 1 - gammainc(alpha, (x - delta) / beta)
 
 
 # Percent point function (Inverse CDF)
 def ppf(percentile, alpha, beta=1.0, delta=0.0):
     if beta > 0:
-        return sc.gammaincinv(alpha, percentile) * beta + delta
+        return gammaincinv(alpha, percentile) * beta + delta
     else:
-        return sc.gammaincinv(alpha, 1 - percentile) * beta + delta
+        return gammaincinv(alpha, 1 - percentile) * beta + delta
 
 
 
@@ -66,7 +67,7 @@ def kurtosis(alpha, beta=1, delta=0):
     return 6 / alpha
 
 def fit(data):
-    if sc.stats.skew(data)>0:
+    if skew(data)>0:
        p=gamma.fit(data)
        return p[0],p[2],p[1]
     else:
@@ -124,14 +125,14 @@ def params(low, mode, high, low_prob=0.1):
     return alpha, beta, delta
 
 
-def __find_alpha(low, mode, high, low_prob=0.1, high_prob=0.9, return_itertations=False, threshold=1e-10):
+def __find_alpha(low, mode, high, low_prob=0.1, high_prob=0.9, return_iterations=False, threshold=1e-10):
     iter = 0
     target_ratio = (mode - low) / (high - mode)
     if abs(target_ratio) > 1:
         target_ratio = 1 / target_ratio
 
     if target_ratio > 0.99999:
-        if (return_itertations):
+        if return_iterations:
             return 1e9, 0
         else:
             return 1e9
@@ -146,7 +147,7 @@ def __find_alpha(low, mode, high, low_prob=0.1, high_prob=0.9, return_itertation
                 ppf(high_prob, alpha_candidate) - (alpha_candidate - 1))
 
         if abs((current_ratio / target_ratio) - 1) < threshold:
-            if (return_itertations):
+            if (return_iterations):
                 return alpha_candidate, iter
             else:
                 return alpha_candidate
@@ -162,9 +163,9 @@ def __find_alpha_at_mode_equals_probability(probability, decimals=10, return_ite
         probability = 1 - probability
     skew_low = 0.000001
     skew_high = 2
-    iter = 0
+    i = 0
     while skew_low <= skew_high:
-        iter += 1
+        i += 1
         skew_mid = (skew_low + skew_high) / 2
         alpha_candidate = 4 / (skew_mid ** 2)
         mode = alpha_candidate - 1
@@ -172,7 +173,7 @@ def __find_alpha_at_mode_equals_probability(probability, decimals=10, return_ite
 
         if round(mode_candidate, decimals) == round(mode, decimals):
             if (return_itertations):
-                return alpha_candidate, iter
+                return alpha_candidate, i
             else:
                 return alpha_candidate
         elif mode_candidate > mode:

@@ -1,4 +1,4 @@
-import egamma.core as core
+import egamma.functions as core
 
 class EgammaDistribution:
 
@@ -10,13 +10,13 @@ class EgammaDistribution:
 
 
     @classmethod
-    def from_tpe(cls, low, most_likely, high, low_prob):
+    def from_tpe(cls, low, most_likely, high, low_prob=0.1):
         a,b,d = core.params(low, most_likely, high, low_prob)
         return cls(a,b,d)
 
     @classmethod
     def from_fit(cls,data):
-        a,b,d=core.fit(data)
+        a,b,d= core.fit(data)
         return cls(a, b, d)
 
     # Probabilty density function
@@ -59,4 +59,15 @@ class EgammaDistribution:
 
     def kurtosis(alpha, beta=1, delta=0):
         return 6 / alpha
+
+
+    def _get_params(self):
+        return self.alpha, self.beta, self.delta
+
+    def _set_params(self, value):
+        self.alpha = value[0]
+        self.beta = value[1]
+        self.delta = value[2]
+
+    params = property(fget=_get_params, fset=_set_params, doc="Gets or sets the alpha, beta and delta parameters")
 
