@@ -1,29 +1,22 @@
-egamma package
+egamma library
 ==============
+.. automodule:: egamma
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
-Submodules
-----------
 
-egamma.core module
+Functions
 ------------------
 
-.. automodule:: egamma.core
+.. automodule:: egamma.functions
    :members:
    :undoc-members:
    :show-inheritance:
 
-egamma.tpe module
------------------
-
-.. automodule:: egamma.tpe
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Module contents
----------------
-
-.. automodule:: egamma
+Classes
+------------------
+.. autoclass:: egamma.dist.EgammaDistribution
    :members:
    :undoc-members:
    :show-inheritance:
