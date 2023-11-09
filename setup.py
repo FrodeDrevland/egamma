@@ -6,12 +6,12 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="egamma",                     # This is the name of the package
-    version="0.0.3",                        # The initial release version
+    version="1.0.0",                        # The initial release version
     author="Frode Drevland",                     # Full name of the author
     author_email='frode.drevland@ntnu.no',
     description="Implementation of the expanded gamma distribution",
     url='https://github.com/FrodeDrevland/egamma',
-    long_description=long_description,      # Long description read from the the readme file
+    long_description=long_description,      # Long description read from the readme file
     long_description_content_type="text/markdown",
     classifiers=[
         "Programming Language :: Python :: 3",
