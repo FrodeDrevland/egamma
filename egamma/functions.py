@@ -166,7 +166,7 @@ def std(alpha, beta=1, delta=0):
     :returns: The standard deviation of the expanded gamma distribution.
     :rtype: float
     """
-    return np.sqrt(alpha) * beta
+    return np.sqrt(alpha) * abs(beta)
 
 
 def skew(alpha, beta=1, delta=0):
@@ -255,19 +255,19 @@ def params(low, most_likely, high, low_prob=0.1):
     else:
         alpha = __find_alpha(low, most_likely, high, low_prob)
 
-    if(most_likely-low > high-most_likely):
-        beta_temp=-1
+    if most_likely == low:
+        beta = (most_likely - high) / ((alpha - 1) - ppf(1 - low_prob, alpha, beta=1))
+    elif most_likely == high:
+        beta = (most_likely - low) / ((alpha - 1) - ppf(low_prob, alpha, beta=-1))
+    elif most_likely-low > high-most_likely:
+         beta = (most_likely - low) / ((alpha - 1) - ppf(1 - low_prob, alpha, beta=1))
     else:
-        beta_temp=1
+        beta = (most_likely - low) / ((alpha - 1) - ppf(low_prob, alpha, beta=1))
 
-
-    if(most_likely != low):
-        beta = (most_likely - low) / ((alpha - 1) - ppf(low_prob, alpha, beta_temp))
-    else:
-        beta = (most_likely - high) / ((alpha - 1) - ppf(1-low_prob, alpha, beta_temp))
     if abs(beta) == 0:
         beta = np.finfo(np.float64).tiny
-    if (high - most_likely < most_likely - low):
+
+    if (high - most_likely < most_likely - low) and beta > 0:
         beta *= -1
 
     delta = most_likely - (alpha - 1) * beta
