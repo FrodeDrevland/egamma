@@ -1,8 +1,9 @@
-import random
-import statistics as stat
 import scipy.special as sc
 from scipy.stats import gamma
 import numpy as np
+import numpy as np
+from scipy.special import gammainc, gammaincinv
+from scipy.stats import gamma, skew as skew_stat
 
 
 def pdf(x, alpha, beta=1.0, delta=0.0):
@@ -20,10 +21,13 @@ def pdf(x, alpha, beta=1.0, delta=0.0):
     :returns: The probability density function evaluated at x.
     :rtype: float
     """
-    if (delta - x) / beta > 0:
-        return np.nan
-    else:
-        return gamma.pdf(abs(x - delta), alpha, 0, abs(beta))
+    if beta == 0:
+        return np.nan  # or raise ValueError
+    t = (x - delta) / beta
+    if t < 0:
+        return 0.0
+    # map to standard 2p Gamma with loc=0, scale=|beta|
+    return gamma.pdf(abs(x - delta), a=alpha, loc=0.0, scale=abs(beta))
 
 
 def cdf(x, alpha, beta=1.0, delta=0.0):
@@ -41,10 +45,18 @@ def cdf(x, alpha, beta=1.0, delta=0.0):
     :returns: The cumulative distribution function evaluated at x.
     :rtype: float
     """
+    if beta == 0:
+            return np.nan  # or raise ValueError
     if beta > 0:
-        return sc.gammainc(alpha, (x - delta) / beta)
+        if x <= delta:
+            return 0.0
+        t = (x - delta) / beta  # t >= 0
+        return float(gammainc(alpha, t))
     else:
-        return 1 - sc.gammainc(alpha, (x - delta) / beta)
+        if x >= delta:
+            return 1.0
+        t = (delta - x) / abs(beta)  # t >= 0
+        return float(1.0 - gammainc(alpha, t))
 
 
 def ppf(percentile, alpha, beta=1.0, delta=0.0):
@@ -62,10 +74,13 @@ def ppf(percentile, alpha, beta=1.0, delta=0.0):
     :returns: The value of the distribution at the given percentile.
     :rtype: float
     """
+    if beta == 0:
+        return np.nan  # or raise ValueError
+    p = float(np.clip(percentile, eps, 1.0 - eps))
     if beta > 0:
-        return sc.gammaincinv(alpha, percentile) * beta + delta
+        return delta + beta * float(gammaincinv(alpha, p))
     else:
-        return sc.gammaincinv(alpha, 1 - percentile) * beta + delta
+        return delta - abs(beta) * float(gammaincinv(alpha, 1.0 - p))
 
 
 def rvs(alpha, beta=1, delta=0, size=1, random_state=None):
@@ -85,8 +100,10 @@ def rvs(alpha, beta=1, delta=0, size=1, random_state=None):
     :returns: Random variates of the expanded gamma distribution.
     :rtype: ndarray or scalar
     """
-    result = gamma.rvs(alpha, scale=abs(beta), loc=0, size=size, random_state=random_state)
-    return result + delta if beta > 0 else delta - result
+    if beta == 0:
+        raise ValueError("beta must be nonzero")
+    y = gamma.rvs(alpha, loc=0.0, scale=abs(beta), size=size, random_state=random_state)
+    return delta + y if beta > 0 else delta - y
 
 
 def mean(alpha, beta=1, delta=0):
@@ -150,7 +167,7 @@ def var(alpha, beta=1, delta=0):
     :returns: The variance of the expanded gamma distribution.
     :rtype: float
     """
-    return alpha * beta ** 2
+    return alpha * (beta ** 2)
 
 
 def std(alpha, beta=1, delta=0):
@@ -166,7 +183,7 @@ def std(alpha, beta=1, delta=0):
     :returns: The standard deviation of the expanded gamma distribution.
     :rtype: float
     """
-    return np.sqrt(alpha) * abs(beta)
+    return np.sqrt(var(alpha, beta, delta))
 
 
 def skew(alpha, beta=1, delta=0):
@@ -182,7 +199,9 @@ def skew(alpha, beta=1, delta=0):
     :returns: The skewness of the expanded gamma distribution.
     :rtype: float
     """
-    return 2 / np.sqrt(alpha) * (beta / abs(beta))
+    if beta == 0:
+        return np.nan 
+    return (2.0 / np.sqrt(alpha)) * np.sign(beta)
 
 
 def kurtosis(alpha, beta=1, delta=0):
@@ -249,27 +268,35 @@ def params(low, most_likely, high, low_prob=0.1):
         if low == high:
             msg += "'High' must be greater than low"
         raise ValueError(msg)
-
+    
+    # Solve alpha first 
     if low == most_likely or high == most_likely:
         alpha = __find_alpha_at_mode_equals_probability(low_prob)
     else:
         alpha = __find_alpha(low, most_likely, high, low_prob)
 
-    if most_likely == low:
-        beta = (most_likely - high) / ((alpha - 1) - ppf(1 - low_prob, alpha, beta=1))
-    elif most_likely == high:
-        beta = (most_likely - low) / ((alpha - 1) - ppf(low_prob, alpha, beta=-1))
-    elif most_likely-low > high-most_likely:
-         beta = (most_likely - low) / ((alpha - 1) - ppf(1 - low_prob, alpha, beta=1))
-    else:
-        beta = (most_likely - low) / ((alpha - 1) - ppf(low_prob, alpha, beta=1))
+    # Decide skew by the side lengths around the mode
+    dL = most_likely - low
+    dH = high - most_likely
+    right_skew = (dH >= dL)
 
-    if abs(beta) == 0:
-        beta = np.finfo(np.float64).tiny
+    q_lo = float(gammaincinv(alpha, low_prob))
+    q_hi = float(gammaincinv(alpha, 1.0 - low_prob))
 
-    if (high - most_likely < most_likely - low) and beta > 0:
-        beta *= -1
+    if right_skew:  # beta > 0
+        denom = q_lo - (alpha - 1.0)
+        if denom == 0:
+            denom = np.copysign(np.finfo(float).tiny, denom)
+        beta = (low - most_likely) / denom
+    else:  # beta < 0, use q(1-p)
+        denom = q_hi - (alpha - 1.0)
+        if denom == 0:
+            denom = np.copysign(np.finfo(float).tiny, denom)
+        beta = (low - most_likely) / denom  # this will be negative
 
+    # Guard against +0.0 / -0.0
+    if beta == 0:
+        beta = np.copysign(np.finfo(float).tiny, -1.0 if not right_skew else 1.0)
     delta = most_likely - (alpha - 1) * beta
 
     return alpha, beta, delta
