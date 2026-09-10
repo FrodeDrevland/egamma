@@ -1,19 +1,66 @@
 About
 ======
 
-Introduction
-________________
-The expanded gamma distribution extends the traditional three-parameter gamma distribution to also accommodate left-skewed data. Its versatility is particularly beneficial in project cost estimation and other fields where such data patterns are common. Although the distribution has been in de facto use in Scandinavian cost-estimation practice since the 1970s, it has only recently been formally defined. The `egamma`  library provides a Python implementation of the expanded gamma distribution, along with the tools for its practical application.
+What this library is for
+________________________
 
-`egamma`  builds upon the solid foundation of SciPy's implementation of the gamma distribution, enhancing it to incorporate the specialized attributes of the expanded version. Additionally, egamma introduces capabilities beyond those offered by SciPy, such as three-point estimation. This method, used with expert judgment, determines the most likely, optimistic, and pessimistic scenarios. Unlike standard practice, which often places optimistic and pessimistic estimates at the 10th and 90th percentiles, egamma offers the flexibility to choose any percentile range, allowing for customized three-point estimation according to user preference.
+``egamma`` turns a three-point estimate — a low value, a most likely value and
+a high value — into a probability distribution you can sample from. It is
+meant for the situation where an expert has given a judgement rather than data
+has been collected, and a Monte Carlo simulation needs actual distribution
+parameters before it can run.
+
+.. code-block:: python
+
+    import egamma
+
+    dist = egamma.EgammaDistribution.from_tpe(low=100, most_likely=140, high=300)
+    dist.rvs(10000)
+
+The fitted distribution's mode is exactly the most likely value, and its 10th
+and 90th percentiles are exactly the two outer values. The numbers the
+estimator gave you come back out.
+
+Why not SciPy alone
+___________________
+
+SciPy has the gamma distribution but not this fit. Two things are missing.
+
+First, ``scipy.stats.gamma`` will not accept a negative scale parameter, so it
+cannot represent a left-skewed estimate — one where the most likely value sits
+closer to the high end than the low end. Such estimates are common in cost and
+schedule work, and the usual workaround is to reverse the data by hand.
+
+Second, neither ``scipy.stats.gamma`` nor ``scipy.stats.pearson3`` will fit to
+a mode plus two percentiles. The elicitation tools that exist work from
+quantiles alone, and a mode is not a quantile: its position depends on the
+shape of the density rather than on an area under it.
+
+``egamma`` builds on SciPy's gamma implementation and supplies both.
+
+What the distribution is
+________________________
+
+The ordinary three-parameter gamma distribution is strictly right-skewed,
+because its scale parameter must be positive. Allowing the scale to take
+negative values reflects the density about the location parameter, so the
+support runs downward from it instead of upward and the skewness turns
+negative. One family then covers estimates leaning either way.
+
+That family is not new. It is the Pearson Type III distribution, long
+established in hydrology and elsewhere, and the reflected form has been
+studied in the statistics literature. What this library provides is that
+family in the shape, scale and location parameters already familiar from the
+gamma distribution, together with the fitting procedure described in the
+mathematical definitions.
 
 Documentation Content
 ________________________
 - **About:** The current section.
-- **Mathematical Definitions:** Mathematical underpinnings of the distribution's functions and statistical measures.
-- **Installation and Usage:** Instructions for installing the library and an introduction to its basic usage.
-- **Functions:** In-depth descriptions of the library's functions, including parameters and return values.
-- **Classes:** Comprehensive details on the library's classes and their structures.
+- **Mathematical Definitions:** The density, the moments, and how the parameters are recovered from a three-point estimate.
+- **Installation and Usage:** Installing the library and using it.
+- **Functions:** Descriptions of the library's functions, their parameters and return values.
+- **Classes:** The library's classes and their structure.
 
 Support
 ________
@@ -22,16 +69,14 @@ If you encounter any problems or have any questions, please open an issue on the
 Contact Information
 ______________________
 
-For inquiries or collaboration on the `egamma`  library, contact:
+For inquiries or collaboration on the ``egamma`` library, contact:
 
 - **Associate Professor Frode Drevland**
 - **Affiliation**: Norwegian University of Science and Technology (NTNU)
 - **Email**: `frode.drevland@ntnu.no <mailto:frode.drevland@ntnu.no>`_
 
-Dr. Drevland is dedicated to the continuous development of the `egamma` library and welcomes feedback, suggestions, and contributions from the community.
+Dr. Drevland is dedicated to the continuous development of the ``egamma`` library and welcomes feedback, suggestions, and contributions from the community.
 
 License
 -------
 This library is distributed under the MIT License. See `LICENSE <https://github.com/FrodeDrevland/egamma/blob/main/LICENSE>`_ for more information.
-
-

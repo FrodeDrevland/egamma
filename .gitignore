@@ -1,1 +1,37 @@
+# Local scratch (from the upstream .gitignore)
 egamma/test.py
+
+# Byte-compiled / optimized
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Sphinx
+docs/build/
+
+# Environments
+.venv/
+venv/
+env/
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Stray copies from downloads (e.g. "functions (1).py")
+*-1.py
+* (1).*

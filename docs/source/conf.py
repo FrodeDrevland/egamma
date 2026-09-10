@@ -8,16 +8,16 @@
 
 import os
 import sys
-sys.path.insert(0, os.path.abspath('../../../egamma'))
 
-# sys.path.insert(0, os.path.abspath(os.path.join('..', '..', 'egamma')))
-
-print(sys.executable)
+# Repository root, so that ``import egamma`` finds the package. The previous
+# path ('../../../egamma') only resolved because the checkout directory
+# happened to share the package's name, and broke if it was renamed.
+sys.path.insert(0, os.path.abspath(os.path.join('..', '..')))
 
 project = 'egamma'
-copyright = '2023, Frode Drevland'
+copyright = '2023-2026, Frode Drevland'
 author = 'Frode Drevland'
-release = '1.0'
+release = '1.1.0'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

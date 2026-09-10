@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="egamma",                     # This is the name of the package
-    version="1.0.2",
+    version="1.1.0",
     author="Frode Drevland",                     # Full name of the author
     author_email='frode.drevland@ntnu.no',
     description="Implementation of the expanded gamma distribution",
@@ -18,6 +18,10 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],                                      # Information to filter the project on PyPi website
+    packages=setuptools.find_packages(exclude=['tests', 'tests.*', 'docs', 'docs.*']),
     python_requires='>=3.6',                # Minimum version requirement of the package
-    install_requires=['scipy', 'numpy']                     # Install other dependencies if any
+    install_requires=['scipy', 'numpy'],                    # Install other dependencies if any
+    extras_require={'test': ['pytest']},
+    package_data={'egamma': ['test_vectors.csv']},
+    include_package_data=True
 )
