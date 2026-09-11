@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.1.1
+
+Packaging only. The library, its behaviour and its results are unchanged from
+1.1.0; the two are identical as installed.
+
+### Fixed
+
+- **Generated Sphinx output was tracked in the repository, and so was included
+  in the release archive.** `docs/build/` was listed in `.gitignore`, but had
+  been committed before that rule was added, so it stayed tracked and
+  `git archive` — which produces the GitHub release archive, and therefore the
+  Zenodo deposit — carried it. The archive held a 282 kB pickled Sphinx
+  environment, seven doctrees, and a stale, partially generated HTML site that
+  no longer matched `docs/source/`. The directory is no longer tracked, and a
+  `.gitattributes` marks it `export-ignore` so that build products stay out of
+  release archives if it is ever committed again.
+
 ## 1.1.0
 
 Corrections to the fitting procedure. **Results change for two cases**, so

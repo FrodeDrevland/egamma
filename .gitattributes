@@ -1,0 +1,7 @@
+# Keep generated and repository-only files out of `git archive` output, which is
+# what GitHub's release tarball/zip contains and therefore what Zenodo deposits.
+# The archive should hold the library, its tests, its docs *source* and its
+# licence -- not build products.
+
+docs/build      export-ignore
+.gitattributes  export-ignore
