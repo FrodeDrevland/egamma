@@ -1,0 +1,23 @@
+{
+  "upload_type": "software",
+  "title": "eGamma: an expanded Gamma distribution library for Python",
+  "creators": [
+    {
+      "name": "Drevland, Frode",
+      "affiliation": "Norwegian University of Science and Technology (NTNU)",
+      "orcid": "0000-0002-4596-1564"
+    }
+  ],
+  "license": "MIT",
+  "language": "eng",
+  "keywords": [
+    "expanded Gamma distribution",
+    "Pearson Type III distribution",
+    "three-point estimation",
+    "parameter estimation",
+    "Monte Carlo simulation",
+    "cost estimation",
+    "Python"
+  ],
+  "description": "<p>eGamma implements the expanded Gamma distribution: a three-parameter Gamma distribution whose scale parameter is allowed to be negative, so that the density is reflected about its location parameter and can represent left-skewed as well as right-skewed data. In that form the family is Pearson Type III, expressed in the Gamma distribution's own shape, scale and location parameters, so that existing Gamma routines can be reused.</p><p>The library provides the density, cumulative distribution and quantile functions, random variates, and the moments of the distribution &mdash; mean, mode, median, variance, standard deviation, skewness and excess kurtosis. Parameters can be obtained in two ways. They can be fitted to a sample, by maximum likelihood or by the method of moments. Alternatively they can be fitted to a three-point estimate, where a low, most likely and high value are supplied and the outer two are interpreted at a chosen pair of symmetric percentiles, the 10th and 90th by default. The three-point routine is intended for probabilistic cost and schedule analysis, where estimates elicited from experts must be turned into distributions that a Monte Carlo simulation can sample.</p><p>Conformance test vectors giving inputs and fitted parameters at full double precision are distributed with the package as a machine-readable file, and are exercised by the test suite.</p><p>Source code: <a href=\"https://github.com/FrodeDrevland/egamma\">github.com/FrodeDrevland/egamma</a><br>Package: <a href=\"https://pypi.org/project/egamma/\">pypi.org/project/egamma</a><br>Documentation: <a href=\"https://frodedrevland.github.io/egamma/\">frodedrevland.github.io/egamma</a></p>"
+}
