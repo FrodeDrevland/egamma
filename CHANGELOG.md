@@ -1,5 +1,62 @@
 # Changelog
 
+## 1.2.0
+
+The fitting procedure now searches on the mode's **position** within the elicited
+range rather than on the half-range ratio, and stops on an absolute tolerance
+rather than a relative one. **Fitted parameters change** in the last few digits
+for most inputs, and estimates with a mode very close to an outer value are now
+fitted where 1.1.1 could refuse them. Results produced with 1.1.1 should be
+recomputed if either matters.
+
+Only the fitting routine changes. The distribution functions are untouched, and
+so are the moments: `mean` remains `alpha * beta + delta` and `std` remains a
+function of `alpha` and `beta` alone, as they must be for a distribution
+instantiated directly from parameters rather than fitted.
+
+### Changed
+
+- **The shape search matches mode position.** The target is
+  `t = min(mode - low, high - mode) / (high - low)` and the model quantity is
+  `t_alpha = (alpha - 1 - q_low) / (q_high - q_low)`. The search stops when
+  `|t_alpha - t| < tolerance`. That difference is itself the maximum normalised
+  error in the three reproduced values, so the tolerance is now stated directly
+  in the quantity users care about rather than implying it through a bound.
+- **`TOLERANCE = 2.5e-11` replaces `THRESHOLD = 1e-10`.** This is not a rename:
+  the old value bounded `|r_hat/r - 1|` on the half-range ratio, the new one
+  bounds `|t_alpha - t|` directly. 2.5e-11 is the reproduction accuracy the old
+  relative threshold implied, so the intended accuracy is unchanged. `THRESHOLD`
+  remains as a deprecated alias.
+- **`params` accepts `tolerance`, `alpha_max` and `max_iter`** and validates
+  them: the tolerance must lie in (0, 1/2), the ceiling must exceed 1, and the
+  iteration limit must be a positive integer.
+
+### Fixed
+
+- **A mode very close to an outer value is no longer refused.** The relative
+  stopping rule demanded an absolute agreement of `threshold * r`, which tends to
+  zero with the ratio, so an estimate such as (100, 100.00001, 300) could exhaust
+  the search and report failure although it is admissible. The absolute rule
+  imposes the same reproduction requirement near an outer value as at it.
+- **The shape ceiling is no longer returned silently.** `params` returns a
+  `FitResult`, which is still a plain `(alpha, beta, delta)` tuple and unpacks as
+  one, but also carries `ceiling`, `position_error` and `iterations`. A caller can
+  now distinguish a fit that met the tolerance from the ceiling approximation
+  returned for an estimate too near symmetry to resolve.
+
+### Removed
+
+- **The separate endpoint solver.** A mode at an outer value gives
+  `target_position = 0` and goes through the ordinary search, so
+  `__find_alpha_at_mode_equals_probability` is gone. There is no longer a
+  different code path, or a different tolerance, for the endpoint cases.
+
+### Conformance vectors
+
+`test_vectors.csv` is regenerated and now carries ten cases rather than eight,
+adding a mode immediately inside each outer value, and a `ceiling` column. These
+supersede the 1.1.1 vectors.
+
 ## 1.1.1
 
 Packaging only. The library, its behaviour and its results are unchanged from

@@ -18,9 +18,21 @@ from scipy.stats import gamma, skew as _sample_skew
 #: reproduced within the same bound.
 ALPHA_MAX = 1e9
 
-#: Default relative acceptance threshold on the target ratio. The reproduction
-#: error of the elicited values is bounded by THRESHOLD / (2 * (2 - THRESHOLD)).
-THRESHOLD = 1e-10
+#: Default acceptance tolerance on the normalised mode position.
+#:
+#: The search stops when the fitted mode position differs from the elicited one
+#: by less than this, and that difference is itself the maximum normalised error
+#: in the three reproduced values, so the tolerance is stated directly in the
+#: quantity a user cares about. It replaces the relative threshold on the
+#: half-range ratio used up to version 1.1.1, which demanded ever tighter
+#: absolute agreement as the mode approached an outer value and could refuse
+#: admissible estimates for that reason alone. The value preserves the
+#: reproduction accuracy the old relative threshold of 1e-10 implied.
+TOLERANCE = 2.5e-11
+
+#: Deprecated alias for :data:`TOLERANCE`, retained so that code written against
+#: version 1.1.1 keeps importing. Note that the quantity it bounds has changed.
+THRESHOLD = TOLERANCE
 
 #: Maximum bisection steps before reporting failure.
 MAX_ITER = 100
@@ -306,29 +318,77 @@ def fit(data, method='mle'):
     raise ValueError("method must be 'mle' or 'mom', not %r" % (method,))
 
 
-def params(low, most_likely, high, low_prob=0.1):
+class FitResult(tuple):
+    """The fitted ``(alpha, beta, delta)``, with diagnostics attached.
+
+    This is a plain 3-tuple, so ``alpha, beta, delta = params(...)`` and
+    ``params(...)[0]`` behave exactly as they did in earlier versions. The
+    extra attributes are there because returning the shape ceiling silently is
+    unhelpful: a caller that wants to know whether it received a fitted shape or
+    the ceiling approximation can ask.
+
+    :ivar bool ceiling: True when the estimate was too near symmetry for the
+        shape ceiling to resolve, so ``alpha_max`` was returned. The elicited
+        values are then reproduced to ``position_error`` rather than to the
+        requested tolerance.
+    :ivar float position_error: ``|t_alpha - t|`` at the returned shape, the
+        maximum normalised error in the reproduced values in exact arithmetic.
+    :ivar int iterations: Bisection steps used; zero when the ceiling was taken.
+    """
+
+    def __new__(cls, alpha, beta, delta, ceiling=False, position_error=0.0,
+                iterations=0):
+        self = super().__new__(cls, (alpha, beta, delta))
+        self.ceiling = ceiling
+        self.position_error = position_error
+        self.iterations = iterations
+        return self
+
+    def __repr__(self):
+        return ('FitResult(alpha=%r, beta=%r, delta=%r, ceiling=%r, '
+                'position_error=%r)' % (self[0], self[1], self[2],
+                                        self.ceiling, self.position_error))
+
+
+def params(low, most_likely, high, low_prob=0.1, tolerance=TOLERANCE,
+           alpha_max=ALPHA_MAX, max_iter=MAX_ITER):
     """
     Find the parameters of the expanded gamma distribution given a three-point estimate.
 
-    This function is designed to work with estimates of uncertain quantities based on a optimistic ,
-    most likely , and pessimistic  scenario. The terms 'low' and 'high' are used instead of
-    'optimistic' and 'pessimistic' to accommodate contexts where the meaning of these terms may be reversed,
-    such as costs (where high is pessimistic) versus revenues (where high is optimistic).
+    This function is designed to work with estimates of uncertain quantities based on an
+    optimistic, most likely, and pessimistic scenario. The terms 'low' and 'high' are used
+    instead of 'optimistic' and 'pessimistic' to accommodate contexts where the meaning of
+    these terms may be reversed, such as costs (where high is pessimistic) versus revenues
+    (where high is optimistic).
 
-    The scale parameter is taken from the full elicited span rather than from a
-    mode-to-outer distance. The span is better conditioned, and one expression
-    covers every case including the mode coinciding with an outer value, where
-    a mode-to-outer distance degenerates to zero over zero.
+    The shape parameter is found by matching the mode's position within the
+    elicited range; scale and location then follow in closed form. The scale is
+    taken from the full elicited span rather than from a mode-to-outer distance,
+    because the span is better conditioned and one expression covers every case,
+    including a mode coinciding with an outer value where a mode-to-outer
+    distance degenerates to zero over zero.
+
+    The returned object is a 3-tuple of ``(alpha, beta, delta)`` and unpacks as
+    one. It additionally carries ``ceiling``, ``position_error`` and
+    ``iterations``; see :class:`FitResult`.
 
     :param float low: The low estimate.
     :param float most_likely: The most likely estimate.
     :param float high: The high estimate.
-    :param float low_prob:  The probability associated with the low estimate. Defaults to 0.1. Note: the converse high_prob is calculated automatically as (1 - low_prob)
+    :param float low_prob: The probability associated with the low estimate. Defaults to
+        0.1. Note: the converse high_prob is calculated automatically as (1 - low_prob).
+    :param float tolerance: Acceptance tolerance on the normalised mode position,
+        which is also the bound on the normalised error in the reproduced values.
+        Defaults to :data:`TOLERANCE`.
+    :param float alpha_max: The shape ceiling. Defaults to :data:`ALPHA_MAX`.
+    :param int max_iter: Maximum bisection steps. Defaults to :data:`MAX_ITER`.
 
-    :return: A tuple containing the estimated shape (alpha), scale (beta), and location (delta) parameters of the gamma distribution.
-    :rtype: tuple
+    :return: The shape (alpha), scale (beta) and location (delta) parameters.
+    :rtype: FitResult
 
-    :raises ValueError: If the estimates are not finite, if low_prob is outside (0, 0.5), or if the provided three-point estimates do not form a valid range.
+    :raises ValueError: If the estimates are not finite, if low_prob is outside (0, 0.5),
+        if a numerical control is out of range, or if the provided three-point estimate
+        does not form a valid range.
     :raises RuntimeError: If the shape search does not converge.
     """
     for name, value in (('low', low), ('most_likely', most_likely), ('high', high)):
@@ -338,113 +398,107 @@ def params(low, most_likely, high, low_prob=0.1):
     if not 0 < low_prob < 0.5:
         raise ValueError('Invalid low_prob: must satisfy 0 < low_prob < 0.5')
 
-    if low > most_likely or high < most_likely or low == high:
+    if not (np.isfinite(tolerance) and 0 < tolerance < 0.5):
+        raise ValueError('Invalid tolerance: must satisfy 0 < tolerance < 0.5')
+
+    if not (np.isfinite(alpha_max) and alpha_max > 1):
+        raise ValueError('Invalid alpha_max: must be finite and greater than 1')
+
+    if not (isinstance(max_iter, (int, np.integer)) and max_iter > 0):
+        raise ValueError('Invalid max_iter: must be a positive integer')
+
+    if low > most_likely or high < most_likely or low >= high:
         msg = 'Invalid three-point-estimate: '
         if low > most_likely:
-            msg += "'low' must be less than or equal to 'mode'"
-        if high < most_likely:
-            msg += "'High' must be greater than or equal 'mode'"
-        if low == high:
-            msg += "'High' must be greater than low"
+            msg += "'low' must be less than or equal to 'most_likely'"
+        elif high < most_likely:
+            msg += "'high' must be greater than or equal to 'most_likely'"
+        else:
+            msg += "'high' must be greater than 'low'"
         raise ValueError(msg)
 
-    if low == most_likely or high == most_likely:
-        alpha = __find_alpha_at_mode_equals_probability(low_prob)
-    else:
-        alpha = __find_alpha(low, most_likely, high, low_prob)
+    alpha, iterations, at_ceiling, position_error = __find_alpha(
+        low, most_likely, high, low_prob, tolerance, alpha_max, max_iter)
 
     if alpha is None:
         raise RuntimeError(
-            'Fit did not converge: the requested threshold could not be met. '
-            'This usually means the estimate is more skewed than the elicited '
-            'percentiles admit.')
+            'Fit did not converge: the requested tolerance of %g could not be '
+            'met within %d iterations. Try a looser tolerance, or check that '
+            'the arithmetic can represent the elicited values and their '
+            'differences.' % (tolerance, max_iter))
 
     beta = (high - low) / (ppf(1 - low_prob, alpha) - ppf(low_prob, alpha))
-
-    if abs(beta) == 0:
-        beta = np.finfo(np.float64).tiny
 
     if (most_likely - low) > (high - most_likely):
         beta = -beta
 
     delta = most_likely - (alpha - 1) * beta
 
-    return alpha, beta, delta
+    return FitResult(alpha, beta, delta, at_ceiling, position_error, iterations)
 
 
-def __find_alpha(low, mode, high, low_prob=0.1, high_prob=None, return_itertations=False,
-                 threshold=THRESHOLD, alpha_max=ALPHA_MAX, max_iter=MAX_ITER):
-    """Solve the single equation in the shape parameter by bisection on skewness.
+def __find_alpha(low, mode, high, low_prob=0.1, tolerance=TOLERANCE,
+                 alpha_max=ALPHA_MAX, max_iter=MAX_ITER):
+    """Find the shape parameter by bisection on the magnitude of skewness.
 
-    Returns ``None`` (or ``(None, iterations)``) if the requested threshold
-    cannot be met, rather than looping or returning an unconverged value.
+    The search matches the mode's position within the elicited range,
+
+        t         = min(mode - low, high - mode) / (high - low)
+        t_alpha   = (alpha - 1 - q_low) / (q_high - q_low)
+
+    and stops when ``|t_alpha - t| < tolerance``. Both skew directions reduce to
+    the same target, so no separate treatment of left skew is needed here, and a
+    mode at an outer value is simply the case ``t = 0`` rather than a separate
+    routine.
+
+    Matching positions rather than the half-range ratio matters near an outer
+    value. The ratio tends to zero there, so a relative test on it would demand
+    progressively finer absolute agreement even though the accuracy required of
+    the elicited values had not changed.
+
+    :returns: ``(alpha, iterations, at_ceiling, position_error)``, with ``alpha``
+        None if the search did not converge.
     """
-    if high_prob is None:
-        high_prob = 1 - low_prob
+    high_prob = 1 - low_prob
+    span = high - low
+    target_position = min(mode - low, high - mode) / span
 
-    def _ratio(a):
-        return ((a - 1) - ppf(low_prob, a)) / (ppf(high_prob, a) - (a - 1))
+    def _position(a, q_low, q_high):
+        return ((a - 1) - q_low) / (q_high - q_low)
 
-    target_ratio = (mode - low) / (high - mode)
-    if target_ratio > 1:
-        target_ratio = 1 / target_ratio
+    q_low = ppf(low_prob, alpha_max)
+    q_high = ppf(high_prob, alpha_max)
+    max_position = _position(alpha_max, q_low, q_high)
 
-    # The largest ratio the search can actually reach is the one alpha_max
-    # produces. Deriving the symmetry shortcut from it rather than fixing it
-    # keeps the root bracketed for any percentile convention.
-    ratio_max = _ratio(alpha_max)
-    if ratio_max <= 0:
+    # The greatest position the search can reach is the one alpha_max produces,
+    # and it depends on the percentile convention: about 0.499985 at P_L = 0.10
+    # but 0.457948 at P_L = 0.4999. Deriving the cut from alpha_max rather than
+    # fixing it keeps the root bracketed under any convention.
+    if max_position <= 0:
         raise ValueError(
-            'alpha_max is too small for low_prob=%g: no admissible estimate '
-            'can be fitted with this ceiling.' % low_prob)
+            'alpha_max=%g is too small for low_prob=%g: it does not reach '
+            'beyond the endpoint shape, so no admissible estimate can be '
+            'fitted with this ceiling.' % (alpha_max, low_prob))
 
-    if target_ratio >= ratio_max:
-        return (alpha_max, 0) if return_itertations else alpha_max
-
-    skew_low = 2 / np.sqrt(alpha_max)
-    skew_high = 2
-    for iteration in range(1, max_iter + 1):
-        skew_mid = (skew_low + skew_high) / 2
-        if skew_mid == skew_low or skew_mid == skew_high:
-            return (None, iteration) if return_itertations else None
-        alpha_candidate = 4 / (skew_mid ** 2)
-        current_ratio = _ratio(alpha_candidate)
-
-        if abs((current_ratio / target_ratio) - 1) < threshold:
-            return (alpha_candidate, iteration) if return_itertations else alpha_candidate
-        elif current_ratio < target_ratio:
-            skew_high = skew_mid
-        else:
-            skew_low = skew_mid
-    return (None, max_iter) if return_itertations else None
-
-
-def __find_alpha_at_mode_equals_probability(probability, return_itertations=False,
-                                            threshold=THRESHOLD, alpha_max=ALPHA_MAX,
-                                            max_iter=MAX_ITER):
-    """Shape parameter whose mode falls exactly at the given probability.
-
-    Stops on the residual normalised by the standard percentile span, so the
-    reproduction bound of the general search covers this case too.
-    """
-    if probability > 0.5:
-        probability = 1 - probability
+    if target_position >= max_position:
+        return alpha_max, 0, True, abs(max_position - target_position)
 
     skew_low = 2 / np.sqrt(alpha_max)
     skew_high = 2
     for iteration in range(1, max_iter + 1):
         skew_mid = (skew_low + skew_high) / 2
         if skew_mid == skew_low or skew_mid == skew_high:
-            return (None, iteration) if return_itertations else None
+            return None, iteration, False, np.nan
         alpha_candidate = 4 / (skew_mid ** 2)
-        mode_standard = alpha_candidate - 1
-        mode_candidate = ppf(probability, alpha_candidate)
-        span = ppf(1 - probability, alpha_candidate) - mode_candidate
+        q_low = ppf(low_prob, alpha_candidate)
+        q_high = ppf(high_prob, alpha_candidate)
+        candidate_position = _position(alpha_candidate, q_low, q_high)
+        position_error = abs(candidate_position - target_position)
 
-        if abs(mode_candidate - mode_standard) / span < threshold / 4:
-            return (alpha_candidate, iteration) if return_itertations else alpha_candidate
-        elif mode_candidate > mode_standard:
+        if position_error < tolerance:
+            return alpha_candidate, iteration, False, position_error
+        elif candidate_position < target_position:
             skew_high = skew_mid
         else:
             skew_low = skew_mid
-    return (None, max_iter) if return_itertations else None
+    return None, max_iter, False, np.nan
