@@ -1,0 +1,255 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mathematical Definitions &mdash; egamma 1.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=fc837d61"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="author" title="About these documents" href="about.html" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Installation and Usage" href="usage.html" />
+    <link rel="prev" title="About" href="about.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            egamma
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="about.html">About</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Mathematical Definitions</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#introduction">Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#parameters">Parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#distribution-functions">Distribution Functions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#statistical-measures">Statistical measures</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#fitting-to-a-three-point-estimate">Fitting to a three-point estimate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#admissible-estimates">Admissible estimates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#accuracy">Accuracy</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Installation and Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="functions.html">Functions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="classes.html">Classes</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">egamma</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Mathematical Definitions</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/mathematical_definition.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="mathematical-definitions">
+<h1>Mathematical Definitions<a class="headerlink" href="#mathematical-definitions" title="Link to this heading"></a></h1>
+<section id="introduction">
+<h2>Introduction<a class="headerlink" href="#introduction" title="Link to this heading"></a></h2>
+<p>This page is the reference for the mathematics behind the library: the density
+and its cumulative distribution function, the statistical measures, and the
+procedure by which the parameters are recovered from a three-point estimate.
+Nothing here is needed to use the library; see <a class="reference internal" href="usage.html"><span class="doc">Installation and Usage</span></a> for that.</p>
+</section>
+<section id="parameters">
+<h2>Parameters<a class="headerlink" href="#parameters" title="Link to this heading"></a></h2>
+<p>The distribution is characterised by three parameters:</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(\alpha\)</span> (alpha): The shape parameter, which must be positive (<span class="math notranslate nohighlight">\(\alpha &gt; 0\)</span>).</p></li>
+<li><p><span class="math notranslate nohighlight">\(\beta\)</span> (beta): The scale parameter, which must be non-zero (<span class="math notranslate nohighlight">\(\beta \neq 0\)</span>). Its sign determines the direction of skewness: positive values give right skew, negative values left skew.</p></li>
+<li><p><span class="math notranslate nohighlight">\(\delta\)</span> (delta): The location parameter, which may be any real number. It is the bound of the support, lower when <span class="math notranslate nohighlight">\(\beta &gt; 0\)</span> and upper when <span class="math notranslate nohighlight">\(\beta &lt; 0\)</span>.</p></li>
+</ul>
+<p>The support is <span class="math notranslate nohighlight">\([\delta, \infty)\)</span> for a positive scale and
+<span class="math notranslate nohighlight">\((-\infty, \delta]\)</span> for a negative one.</p>
+<p>The distribution is strictly skewed in one direction or the other; exact
+symmetry is not attainable at any finite <span class="math notranslate nohighlight">\(\alpha\)</span>. As <span class="math notranslate nohighlight">\(\alpha\)</span>
+grows the shape converges to that of a normal distribution, so a large value
+such as <span class="math notranslate nohighlight">\(10^9\)</span> approximates a symmetric case closely.</p>
+</section>
+<section id="distribution-functions">
+<h2>Distribution Functions<a class="headerlink" href="#distribution-functions" title="Link to this heading"></a></h2>
+<p>The probability density function (PDF) and cumulative distribution function
+(CDF) are defined as follows.</p>
+<p>Probability Density Function (PDF):</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}f(x; \alpha, \beta, \delta) = \left\{
+    \begin{array}{ll}
+        \dfrac{|x - \delta|^{\alpha - 1} e^{-(x - \delta) / \beta}}{|\beta|^\alpha \Gamma(\alpha)}, &amp; \text{for } \dfrac{x - \delta}{\beta} &gt; 0 \\
+        0, &amp; \text{otherwise}
+    \end{array}
+\right.\end{split}\]</div>
+<p>where <span class="math notranslate nohighlight">\(\Gamma(\alpha)\)</span> is the gamma function <span class="math notranslate nohighlight">\(\displaystyle\int_{0}^{\infty}t^{\alpha-1}e^{-t}\,dt\)</span></p>
+<p>Cumulative Density Function (CDF):</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}F(x; \alpha, \beta, \delta) = \left\{
+    \begin{array}{ll}
+        \dfrac{\gamma(\alpha, \dfrac{x - \delta}{\beta})}{\Gamma(\alpha)}, &amp; \text{for } \beta &gt; 0, \dfrac{x - \delta}{\beta} &gt; 0 \\
+        1 - \dfrac{\gamma(\alpha, \dfrac{x - \delta}{\beta})}{\Gamma(\alpha)}, &amp; \text{for } \beta &lt; 0, \dfrac{x - \delta}{\beta} &gt; 0
+    \end{array}
+\right.\end{split}\]</div>
+<p>where <span class="math notranslate nohighlight">\(\gamma \left(\alpha, \frac{x-\delta}{\beta}\right)\)</span> is the lower incomplete gamma function <span class="math notranslate nohighlight">\(\displaystyle\int_{0}^{\frac{x-\delta}{\beta}}t^{\alpha-1}e^{-t}\,dt\)</span>.</p>
+<p>The CDF has no closed form, so the percent point function must be obtained
+numerically. That single fact shapes the fitting procedure below.</p>
+</section>
+<section id="statistical-measures">
+<h2>Statistical measures<a class="headerlink" href="#statistical-measures" title="Link to this heading"></a></h2>
+<p>Expected value:</p>
+<div class="math notranslate nohighlight">
+\[E[X] = \alpha \beta + \delta\]</div>
+<p>Variance:</p>
+<div class="math notranslate nohighlight">
+\[\text{Var}(X) = \alpha \beta^2\]</div>
+<p>Skewness:</p>
+<div class="math notranslate nohighlight">
+\[\text{Skew}(X) = \dfrac{\beta}{|\beta|}\times\dfrac{2}{\sqrt{\alpha}}\]</div>
+<p>Excess kurtosis:</p>
+<div class="math notranslate nohighlight">
+\[\text{ExKurt}(X) = \dfrac{6}{\alpha}\]</div>
+<p>Mode, for <span class="math notranslate nohighlight">\(\alpha &gt; 1\)</span>:</p>
+<div class="math notranslate nohighlight">
+\[\text{Mode}(X) = (\alpha - 1) \beta + \delta\]</div>
+<p>For <span class="math notranslate nohighlight">\(\alpha \leq 1\)</span> the density is monotone on its support and the mode
+lies at <span class="math notranslate nohighlight">\(\delta\)</span>.</p>
+</section>
+<section id="fitting-to-a-three-point-estimate">
+<h2>Fitting to a three-point estimate<a class="headerlink" href="#fitting-to-a-three-point-estimate" title="Link to this heading"></a></h2>
+<p>Given elicited values <span class="math notranslate nohighlight">\(L \leq M \leq H\)</span>, where <span class="math notranslate nohighlight">\(L\)</span> and <span class="math notranslate nohighlight">\(H\)</span>
+are the <span class="math notranslate nohighlight">\(P_L\)</span> and <span class="math notranslate nohighlight">\(P_H = 1 - P_L\)</span> percentiles and <span class="math notranslate nohighlight">\(M\)</span> is the
+mode, the problem is to find <span class="math notranslate nohighlight">\(\alpha\)</span>, <span class="math notranslate nohighlight">\(\beta\)</span> and <span class="math notranslate nohighlight">\(\delta\)</span>
+reproducing all three.</p>
+<p>Writing <span class="math notranslate nohighlight">\(G^{-1}(p; \alpha)\)</span> for the percent point function of the
+standard gamma distribution with unit scale and zero location, and taking
+<span class="math notranslate nohighlight">\(\beta &gt; 0\)</span> for the moment, the ratio of the two half-ranges eliminates
+both the scale and the location and leaves a single equation in the shape
+parameter:</p>
+<div class="math notranslate nohighlight">
+\[\frac{M-L}{H-M} = \frac{(\alpha-1) - G^{-1}(P_L; \alpha)}{G^{-1}(P_H; \alpha) - (\alpha-1)}\]</div>
+<p>This has no closed-form solution and is solved numerically. The library
+bisects on skewness, <span class="math notranslate nohighlight">\(2/\sqrt{\alpha}\)</span>, rather than on <span class="math notranslate nohighlight">\(\alpha\)</span>
+itself, since skewness is bounded on <span class="math notranslate nohighlight">\((0, 2]\)</span> and needs no interval
+derived from the ceiling.</p>
+<p>With <span class="math notranslate nohighlight">\(\alpha\)</span> known, the remaining parameters follow in closed form. The
+scale comes from the full elicited span, which is better conditioned than
+either half:</p>
+<div class="math notranslate nohighlight">
+\[\beta = \frac{H - L}{G^{-1}(P_H; \alpha) - G^{-1}(P_L; \alpha)}\]</div>
+<p>and the location from the mode relation:</p>
+<div class="math notranslate nohighlight">
+\[\delta = M - (\alpha - 1)\beta\]</div>
+<p>A left-skewed estimate, one for which <span class="math notranslate nohighlight">\(M - L &gt; H - M\)</span>, is the mirror
+image. It is solved by inverting the ratio, solving the same equation, and
+negating the scale before computing the location.</p>
+</section>
+<section id="admissible-estimates">
+<h2>Admissible estimates<a class="headerlink" href="#admissible-estimates" title="Link to this heading"></a></h2>
+<p>Not every ordering <span class="math notranslate nohighlight">\(L \leq M \leq H\)</span> can be fitted. The mode of the
+fitted distribution cannot fall outside the interval the elicited percentiles
+enclose, and requiring <span class="math notranslate nohighlight">\(L \leq M\)</span> therefore requires
+<span class="math notranslate nohighlight">\(G^{-1}(P_L; \alpha) \leq \alpha - 1\)</span>. The shape at which the two
+coincide is the smallest admissible one. For <span class="math notranslate nohighlight">\(P_L = 0.10\)</span> it is
+<span class="math notranslate nohighlight">\(\alpha = 1.15631\)</span>, corresponding to a skewness of <span class="math notranslate nohighlight">\(1.85991\)</span>, so
+no valid estimate implies more skewness than that. The bound depends on
+<span class="math notranslate nohighlight">\(P_L\)</span>; a wider elicited interval admits more.</p>
+<p>The boundary at <span class="math notranslate nohighlight">\(\alpha = 1\)</span>, where the mode reaches the support
+endpoint, lies strictly inside the inadmissible region and is never reached
+from a valid estimate.</p>
+<p>A symmetric estimate is reproducible only in the limit
+<span class="math notranslate nohighlight">\(\alpha \to \infty\)</span>. The library returns a ceiling of <span class="math notranslate nohighlight">\(10^9\)</span>,
+which reproduces the elicited values to about <span class="math notranslate nohighlight">\(1.5 \times 10^{-5}\)</span> of
+the elicited range rather than exactly.</p>
+</section>
+<section id="accuracy">
+<h2>Accuracy<a class="headerlink" href="#accuracy" title="Link to this heading"></a></h2>
+<p>For any admissible asymmetric estimate, the deviation of a recovered elicited
+value, normalised by the elicited range, is bounded by</p>
+<div class="math notranslate nohighlight">
+\[E &lt; \frac{\tau}{2(2 - \tau)} = \frac{\tau}{4} + O(\tau^2)\]</div>
+<p>where <span class="math notranslate nohighlight">\(\tau\)</span> is the relative acceptance threshold on the ratio. At the
+default <span class="math notranslate nohighlight">\(\tau = 10^{-10}\)</span> this is <span class="math notranslate nohighlight">\(2.5 \times 10^{-11}\)</span>. The bound
+holds for every admissible input rather than for tested cases, and it excludes
+the symmetric branch, where the ceiling rather than the threshold governs.</p>
+<p>Recovery of <span class="math notranslate nohighlight">\(\alpha\)</span> itself is a weaker guarantee. The ratio above
+approaches unity as <span class="math notranslate nohighlight">\(\alpha^{-1/2}\)</span>, so the recovery becomes
+increasingly ill-conditioned near symmetry and a fixed threshold buys
+progressively less accuracy in the shape parameter. This is a property of the
+problem and not of the solver; tightening the threshold improves the recovered
+shape at the cost of more iterations.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="about.html" class="btn btn-neutral float-left" title="About" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="usage.html" class="btn btn-neutral float-right" title="Installation and Usage" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023-2026, Frode Drevland.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
