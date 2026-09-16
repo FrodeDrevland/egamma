@@ -26,11 +26,27 @@ class EgammaDistribution:
         self.alpha = alpha
         self.beta = beta
         self.delta = delta
+        #: Whether the shape ceiling was returned instead of a shape meeting
+        #: the tolerance. ``None`` for a distribution not built by
+        #: :meth:`from_tpe`, which is not the same as ``False``.
+        self.ceiling = None
+        #: ``|t_alpha - t|`` at the returned shape; ``None`` if not fitted.
+        self.position_error = None
+        #: Bisection steps used by the fit; ``None`` if not fitted.
+        self.iterations = None
 
     @classmethod
-    def from_tpe(cls, low, most_likely, high, low_prob=0.1):
+    def from_tpe(cls, low, most_likely, high, low_prob=0.1,
+                 tolerance=core.TOLERANCE, alpha_max=core.ALPHA_MAX,
+                 max_iter=core.MAX_ITER):
         """
         Create an EgammaDistribution instance from a three-point estimate.
+
+        The diagnostics :func:`~egamma.functions.params` returns are kept on
+        the instance as :attr:`ceiling`, :attr:`position_error` and
+        :attr:`iterations`. Discarding them would make an estimate too near
+        symmetry to resolve indistinguishable from one fitted to the
+        tolerance, which is the silence the diagnostics exist to break.
 
         :param low: The low estimate of the distribution.
         :type low: float
@@ -40,23 +56,41 @@ class EgammaDistribution:
         :type high: float
         :param low_prob: The probability associated with the low estimate, defaults to 0.1.
         :type low_prob: float, optional
+        :param tolerance: Acceptance tolerance on the normalised mode position.
+        :type tolerance: float, optional
+        :param alpha_max: The shape ceiling. This is an implementation choice
+            rather than a property of the method, so it is exposed here as it
+            is on :func:`~egamma.functions.params`.
+        :type alpha_max: float, optional
+        :param max_iter: Maximum bisection steps before reporting failure.
+        :type max_iter: int, optional
         :returns: An instance of EgammaDistribution.
         :rtype: EgammaDistribution
         """
-        a, b, d = core.params(low, most_likely, high, low_prob)
-        return cls(a, b, d)
+        result = core.params(low, most_likely, high, low_prob,
+                             tolerance=tolerance, alpha_max=alpha_max,
+                             max_iter=max_iter)
+        obj = cls(*result)
+        obj.ceiling = result.ceiling
+        obj.position_error = result.position_error
+        obj.iterations = result.iterations
+        return obj
 
     @classmethod
-    def from_fit(cls, data):
+    def from_fit(cls, data, method='mle'):
         """
         Create an EgammaDistribution instance by fitting to data.
 
         :param data: The data to fit.
         :type data: array_like
+        :param method: ``'mle'`` (default) for maximum likelihood, or
+            ``'mom'`` for the method of moments, which is the estimator the
+            companion Excel library uses.
+        :type method: str, optional
         :returns: An instance of EgammaDistribution.
         :rtype: EgammaDistribution
         """
-        a, b, d = core.fit(data)
+        a, b, d = core.fit(data, method=method)
         return cls(a, b, d)
 
     def pdf(self, x):
@@ -161,9 +195,9 @@ class EgammaDistribution:
 
     def kurtosis(self):
         """
-        Calculate the kurtosis of the expanded gamma distribution.
+        Calculate the excess kurtosis of the expanded gamma distribution.
 
-        :returns: The kurtosis of the expanded gamma distribution.
+        :returns: The excess kurtosis of the expanded gamma distribution.
         :rtype: float
         """
         return core.kurtosis(self.alpha, self.beta, self.delta)

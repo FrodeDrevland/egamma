@@ -5,8 +5,11 @@
 Corrections to the general distribution functions. **The three-point fit is
 unchanged**: `params` returns the same parameters as 1.2.0 for every input, and
 the conformance vectors are untouched, so nothing fitted with 1.2.0 needs
-recomputing. The corrections affect a distribution built directly from
-parameters, and the method of moments.
+recomputing. That is now pinned by a test that reads the shipped
+`test_vectors.csv` and requires exact equality rather than approximate
+agreement, so a future patch cannot move the fit unnoticed. The corrections
+affect a distribution built directly from parameters, and the method of
+moments.
 
 ### Fixed
 
@@ -45,6 +48,26 @@ parameters, and the method of moments.
   reason. Every percentile convention in practical use is unaffected, as are all
   those tabulated in the accompanying paper.
 
+### Distribution class
+
+- **`EgammaDistribution.from_tpe` kept none of the fit diagnostics.** It
+  unpacked the `FitResult` into three numbers and discarded `ceiling`,
+  `position_error` and `iterations`, so an estimate too near symmetry to resolve
+  was indistinguishable from one fitted to the tolerance — reinstating, through
+  the object interface, precisely the silence those diagnostics were added in
+  1.2.0 to break. They are now carried on the instance. A distribution built
+  directly from parameters has them as `None` rather than `False`, since not
+  having been fitted is not the same as having been fitted without hitting the
+  ceiling.
+- **`from_tpe` accepts `tolerance`, `alpha_max` and `max_iter`,** which `params`
+  has exposed since 1.2.0. `alpha_max` in particular is an implementation choice
+  rather than a property of the method, so an interface that fixed it was
+  understating that.
+- **`from_fit` accepts `method`,** defaulting to `'mle'` as before, so the
+  method of moments is reachable through the object interface as well.
+- **`kurtosis` is documented as excess kurtosis,** which is what it has always
+  returned. Ordinary kurtosis would be `3 + 6/alpha`.
+
 ### Documentation
 
 - **The `ALPHA_MAX` reproduction figure is tied to its convention.** The stated
@@ -52,8 +75,9 @@ parameters, and the method of moments.
   ceiling error grows as the elicited percentiles approach the median, reaching
   about 4.2e-2 at a low probability of 0.4999. The claim that raising the
   ceiling "buys little" is replaced: raising it does reduce the error at a
-  symmetric estimate, and where to stop is a trade-off against conditioning and
-  the reliability of the quantile routines at large shapes.
+  symmetric estimate, but shape recovery becomes increasingly ill-conditioned
+  near symmetry, so the ceiling is an implementation choice to be made together
+  with the numerical functions and precision an implementation uses.
 
 ## 1.2.0
 

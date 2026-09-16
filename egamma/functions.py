@@ -16,11 +16,11 @@ from scipy.stats import gamma, skew as _sample_skew
 #: the convention: the ceiling error grows as the elicited percentiles approach
 #: the median, reaching about 4.2e-2 at a low probability of 0.4999.
 #:
-#: Raising the ceiling does reduce the error at a symmetric estimate. It is not
-#: raised because recovery of the shape parameter becomes increasingly
-#: ill-conditioned as an estimate approaches symmetry, and because the
-#: underlying quantile routines lose reliability at large shapes; where to stop
-#: is an implementation trade-off rather than a property of the method.
+#: Raising the ceiling does reduce the error at a symmetric estimate, but
+#: recovery of the shape parameter becomes increasingly ill-conditioned as an
+#: estimate approaches symmetry. The ceiling is therefore an implementation
+#: choice rather than a property of the method, and should be chosen together
+#: with the numerical functions and precision the implementation uses.
 ALPHA_MAX = 1e9
 
 #: Default acceptance tolerance on the normalised mode position.
@@ -42,7 +42,9 @@ THRESHOLD = TOLERANCE
 #: Maximum bisection steps before reporting failure.
 MAX_ITER = 100
 
-#: Smallest distance from 0 and 1 at which a percentile is evaluated.
+#: Machine epsilon. Retained as a public name for code written against
+#: earlier versions; it no longer bounds the percentiles :func:`ppf` accepts,
+#: which are tested against their own complements instead.
 EPS = np.finfo(float).eps
 
 
@@ -109,16 +111,17 @@ def ppf(percentile, alpha, beta=1.0, delta=0.0):
     :returns: The value of the distribution at the given percentile.
     :rtype: float
     :raises ValueError: If the percentile does not lie strictly between 0 and 1,
-        or lies so close to one of them that its complement is not
-        representable in double precision.
+        or lies so close to one of them that its complement no longer remains
+        distinct from that endpoint in double precision.
 
     .. note::
-       Up to version 1.2.0 a percentile outside the representable range was
-       silently moved to the nearest representable value, so a request for the
-       1e-20 quantile returned the quantile at machine epsilon instead. The
-       distribution evaluated was then not the one asked for. Such a percentile
-       is now rejected. Every percentile convention used in practice, and all
-       those tabulated in the accompanying paper, is unaffected.
+       Up to version 1.2.0 a percentile was silently moved into
+       ``[eps, 1 - eps]``, so a request for the 1e-20 quantile returned the
+       quantile at machine epsilon instead and the distribution evaluated was
+       not the one asked for. Such a percentile is now rejected: the library
+       either computes what was asked for or says it cannot. Every percentile
+       convention used in practice, and all those tabulated in the
+       accompanying paper, are unaffected.
     """
     if beta == 0:
         return np.nan
@@ -130,10 +133,10 @@ def ppf(percentile, alpha, beta=1.0, delta=0.0):
     # distinguishable from their endpoints for the two skew directions to agree.
     if 1.0 - p == 1.0 or 1.0 - p == 0.0:
         raise ValueError(
-            'percentile %r is within one ulp of 0 or 1, so its complement is '
-            'not representable in double precision and the two skew directions '
-            'would not agree. The representable range is about %g to %g.'
-            % (percentile, EPS, 1.0 - EPS))
+            'percentile %r is too close to 0 or 1 for its complement to remain '
+            'distinct from the endpoint in double precision, so the reflected '
+            'branch could not evaluate the quantile the caller asked for'
+            % (percentile,))
     if beta > 0:
         return delta + beta * float(gammaincinv(alpha, p))
     return delta - abs(beta) * float(gammaincinv(alpha, 1.0 - p))
