@@ -10,12 +10,17 @@ from scipy.stats import gamma, skew as _sample_skew
 #:
 #: A symmetric three-point estimate, where the mode sits exactly midway
 #: between the outer values, is only reproducible in the limit as the shape
-#: parameter tends to infinity, so a finite stand-in is needed. At this value
-#: the distribution is close enough to normal that the elicited values are
-#: reproduced to about 1.5e-5 of the elicited range. Raising it buys little,
-#: because recovery of the shape parameter is increasingly ill-conditioned as
-#: an estimate approaches symmetry while the elicited values continue to be
-#: reproduced within the same bound.
+#: parameter tends to infinity, so a finite stand-in is needed. At this value,
+#: and at the default 10th/90th percentile convention, the elicited values are
+#: reproduced to about 1.5e-5 of the elicited range. That figure is specific to
+#: the convention: the ceiling error grows as the elicited percentiles approach
+#: the median, reaching about 4.2e-2 at a low probability of 0.4999.
+#:
+#: Raising the ceiling does reduce the error at a symmetric estimate. It is not
+#: raised because recovery of the shape parameter becomes increasingly
+#: ill-conditioned as an estimate approaches symmetry, and because the
+#: underlying quantile routines lose reliability at large shapes; where to stop
+#: is an implementation trade-off rather than a property of the method.
 ALPHA_MAX = 1e9
 
 #: Default acceptance tolerance on the normalised mode position.
@@ -103,10 +108,32 @@ def ppf(percentile, alpha, beta=1.0, delta=0.0):
     :type delta: float, optional
     :returns: The value of the distribution at the given percentile.
     :rtype: float
+    :raises ValueError: If the percentile does not lie strictly between 0 and 1,
+        or lies so close to one of them that its complement is not
+        representable in double precision.
+
+    .. note::
+       Up to version 1.2.0 a percentile outside the representable range was
+       silently moved to the nearest representable value, so a request for the
+       1e-20 quantile returned the quantile at machine epsilon instead. The
+       distribution evaluated was then not the one asked for. Such a percentile
+       is now rejected. Every percentile convention used in practice, and all
+       those tabulated in the accompanying paper, is unaffected.
     """
     if beta == 0:
         return np.nan
-    p = float(np.clip(percentile, EPS, 1.0 - EPS))
+    p = float(percentile)
+    if not 0.0 < p < 1.0:
+        raise ValueError(
+            'percentile must lie strictly between 0 and 1, not %r' % (percentile,))
+    # The reflected branch evaluates the complement, so both p and 1 - p must be
+    # distinguishable from their endpoints for the two skew directions to agree.
+    if 1.0 - p == 1.0 or 1.0 - p == 0.0:
+        raise ValueError(
+            'percentile %r is within one ulp of 0 or 1, so its complement is '
+            'not representable in double precision and the two skew directions '
+            'would not agree. The representable range is about %g to %g.'
+            % (percentile, EPS, 1.0 - EPS))
     if beta > 0:
         return delta + beta * float(gammaincinv(alpha, p))
     return delta - abs(beta) * float(gammaincinv(alpha, 1.0 - p))
@@ -155,8 +182,15 @@ def mode(alpha, beta=1, delta=0):
     """
     Calculate the mode of the expanded gamma distribution.
 
-    Holds for alpha > 1; for alpha <= 1 the density is monotone on its support
-    and the mode lies at delta.
+    For alpha > 1 the density has an interior maximum at
+    ``(alpha - 1) * beta + delta``. For 0 < alpha <= 1 it is monotone on its
+    support and the mode lies at the support boundary, delta; the interior
+    expression would place it outside the support entirely.
+
+    A three-point fit never produces a shape at or below 1 — the smallest
+    admissible shape is about 1.156 at the default percentile convention — so
+    this distinction does not arise for parameters obtained from
+    :func:`params`. It arises for a distribution constructed directly.
 
     :param alpha: The shape parameter of the expanded gamma distribution.
     :type alpha: float
@@ -164,9 +198,14 @@ def mode(alpha, beta=1, delta=0):
     :type beta: float, optional
     :param delta: The location parameter of the expanded gamma distribution, defaults to 0.
     :type delta: float, optional
-    :returns: The mode of the expanded gamma distribution.
+    :returns: The mode of the expanded gamma distribution, or nan if alpha is
+        not positive, since the distribution is then undefined.
     :rtype: float
     """
+    if not alpha > 0:
+        return np.nan
+    if alpha <= 1:
+        return delta
     return (alpha - 1) * beta + delta
 
 
@@ -270,6 +309,13 @@ def fit(data, method='mle'):
     standard deviation and skewness. The sign of the skewness carries into the
     scale parameter, so the direction of skew is handled automatically.
 
+    A sample skewness small enough to imply a shape above :data:`ALPHA_MAX`
+    is capped there, and the scale is then taken as
+    :math:`|\beta| = s / \sqrt{\alpha}` with the sign of :math:`g`. Both forms
+    agree where the shape is not capped; the second is what preserves the
+    sample variance once it is. The sample mean is preserved either way,
+    because the location is computed last. The skewness is what a cap gives up.
+
     Maximum likelihood is the default and is generally the better estimator.
     The method of moments is closed-form and needs no iteration, which makes it
     useful as a starting point or where an optimiser is unavailable, but it
@@ -308,10 +354,20 @@ def fit(data, method='mle'):
                 'Method of moments is undefined for a sample with zero '
                 'skewness: the shape parameter would be infinite. Use '
                 "method='mle', or treat the sample as symmetric.")
+        s = np.std(data, ddof=1)
         alpha = 4 / g ** 2
         if alpha > ALPHA_MAX:
+            # Capping the shape without recomputing the scale would keep the
+            # scale that belongs to the uncapped shape, so the fitted variance
+            # alpha * beta ** 2 would fall short of the sample variance by the
+            # factor by which the shape was reduced. Taking |beta| = s /
+            # sqrt(alpha) from the capped shape preserves the sample variance;
+            # delta below then preserves the mean. The skewness is what the cap
+            # gives up, which is unavoidable once a ceiling is imposed.
             alpha = ALPHA_MAX
-        beta = np.std(data, ddof=1) * g / 2
+            beta = np.copysign(s / np.sqrt(alpha), g)
+        else:
+            beta = s * g / 2
         delta = np.mean(data) - alpha * beta
         return alpha, beta, delta
 
@@ -397,6 +453,15 @@ def params(low, most_likely, high, low_prob=0.1, tolerance=TOLERANCE,
 
     if not 0 < low_prob < 0.5:
         raise ValueError('Invalid low_prob: must satisfy 0 < low_prob < 0.5')
+
+    # The fit places the high value at 1 - low_prob. Below about one ulp of 1
+    # that complement rounds to 1 exactly, whose quantile is infinite, so the
+    # convention asked for is not the one that would be fitted.
+    if 1.0 - low_prob == 1.0:
+        raise ValueError(
+            'Invalid low_prob: %r is too small for its complement 1 - low_prob '
+            'to be distinguishable from 1 in double precision, so the high '
+            'percentile could not be placed as requested' % (low_prob,))
 
     if not (np.isfinite(tolerance) and 0 < tolerance < 0.5):
         raise ValueError('Invalid tolerance: must satisfy 0 < tolerance < 0.5')

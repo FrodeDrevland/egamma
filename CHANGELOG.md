@@ -1,5 +1,60 @@
 # Changelog
 
+## 1.2.1
+
+Corrections to the general distribution functions. **The three-point fit is
+unchanged**: `params` returns the same parameters as 1.2.0 for every input, and
+the conformance vectors are untouched, so nothing fitted with 1.2.0 needs
+recomputing. The corrections affect a distribution built directly from
+parameters, and the method of moments.
+
+### Fixed
+
+- **`mode` returned a point outside the support for a shape of 1 or less.** For
+  `alpha > 1` the density has an interior maximum at `(alpha - 1) * beta +
+  delta`, but for `0 < alpha <= 1` it is monotone on its support and the mode is
+  at the boundary, `delta`. The function applied the interior expression
+  regardless, so `mode(0.5, 2, 10)` returned 9 — a point the distribution does
+  not reach — where the answer is 10. Its own docstring stated the correct rule.
+  A shape at or below 1 is not reachable through `params`, whose smallest
+  admissible shape is about 1.156, so no fitted distribution was affected.
+  `alpha <= 0` now returns nan rather than a number for a distribution that does
+  not exist.
+- **The method of moments discarded the sample variance when the shape hit the
+  ceiling.** A sample skewness small enough to imply a shape above `ALPHA_MAX`
+  was capped there, but the scale was still taken as `s * g / 2`, the value
+  belonging to the uncapped shape. The fitted variance then fell short of the
+  sample variance by the factor the shape had been reduced by, which for a
+  nearly symmetric sample is catastrophic rather than slight: on a symmetric
+  sample of 8002 values with a standard deviation of 5.01, 1.2.0 returned a
+  fitted standard deviation of 2.9e-13. The scale is now taken as
+  `|beta| = s / sqrt(alpha)` with the sign of the skewness once the shape is
+  capped, which preserves the sample variance; the location is computed last and
+  preserves the mean either way. Below the ceiling both expressions agree and
+  results are unchanged. The companion Excel library already did this, so the
+  two implementations now agree at the ceiling as well as below it.
+
+### Changed
+
+- **`ppf` rejects an unrepresentable percentile instead of silently moving it.**
+  A requested percentile was clipped into `[eps, 1 - eps]`, so asking for the
+  1e-20 quantile returned the quantile at machine epsilon and the distribution
+  evaluated was not the one requested. Percentiles outside `(0, 1)`, and those
+  within one ulp of either end, now raise `ValueError`. `params` rejects a
+  `low_prob` whose complement cannot be distinguished from 1 for the same
+  reason. Every percentile convention in practical use is unaffected, as are all
+  those tabulated in the accompanying paper.
+
+### Documentation
+
+- **The `ALPHA_MAX` reproduction figure is tied to its convention.** The stated
+  1.5e-5 of the elicited range holds at the default 10th/90th percentiles; the
+  ceiling error grows as the elicited percentiles approach the median, reaching
+  about 4.2e-2 at a low probability of 0.4999. The claim that raising the
+  ceiling "buys little" is replaced: raising it does reduce the error at a
+  symmetric estimate, and where to stop is a trade-off against conditioning and
+  the reliability of the quantile routines at large shapes.
+
 ## 1.2.0
 
 The fitting procedure now searches on the mode's **position** within the elicited

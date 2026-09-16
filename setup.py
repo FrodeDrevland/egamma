@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="egamma",                     # This is the name of the package
-    version="1.2.0",
+    version="1.2.1",
     author="Frode Drevland",                     # Full name of the author
     author_email='frode.drevland@ntnu.no',
     description="Implementation of the expanded gamma distribution",

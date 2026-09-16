@@ -1,6 +1,6 @@
 """egamma — the expanded gamma parameterisation and its three-point fit."""
 
-__version__ = "1.2.0"
+__version__ = "1.2.1"
 
 from . functions import *
 from . dist import EgammaDistribution

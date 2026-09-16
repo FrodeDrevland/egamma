@@ -9,6 +9,8 @@ expressed as a fraction of the elicited range H - L.
 import numpy as np
 import pytest
 
+from scipy.stats import skew as _skew
+
 import egamma as eg
 
 P_LOW = 0.10
@@ -137,6 +139,80 @@ def test_ceiling_below_the_endpoint_shape_is_rejected():
     and must be refused rather than used."""
     with pytest.raises(ValueError):
         eg.params(100, 140, 300, P_LOW, alpha_max=1.0000001)
+
+
+def test_mode_is_at_the_boundary_for_a_monotone_density():
+    """For 0 < alpha <= 1 the density is monotone on its support, so the mode is
+    at delta. The interior expression would place it outside the support. No
+    three-point fit reaches this range -- the smallest admissible shape is about
+    1.156 -- but a distribution built directly from parameters can."""
+    for beta in (2.0, -2.0):
+        assert eg.mode(0.5, beta, 10.0) == 10.0
+        assert eg.mode(1.0, beta, 10.0) == 10.0
+        # Just above 1 the interior expression takes over continuously.
+        assert eg.mode(1.0 + 1e-9, beta, 10.0) == pytest.approx(10.0, abs=1e-8)
+    assert eg.mode(3.0, 2.0, 10.0) == 14.0
+    assert np.isnan(eg.mode(0.0, 2.0, 10.0))
+    assert np.isnan(eg.mode(-1.0, 2.0, 10.0))
+
+
+def test_mode_of_every_fitted_distribution_is_interior():
+    """The fix above must not touch any fitted case: params never returns a
+    shape at or below 1."""
+    for mode_value in range(100, 301):
+        a, b, d = eg.params(100, mode_value, 300, P_LOW)
+        assert a > 1.0
+        assert eg.mode(a, b, d) == (a - 1) * b + d
+
+
+def test_mom_preserves_the_sample_variance_at_the_shape_ceiling():
+    """Capping the shape without recomputing the scale leaves the scale that
+    belongs to the uncapped shape, so the fitted variance falls short of the
+    sample variance by the factor the shape was reduced by."""
+    rng = np.random.default_rng(3)
+    x = rng.normal(100.0, 5.0, 4001)
+    # Force a skewness small enough to drive 4/g**2 past the ceiling.
+    x = np.concatenate([x, -x + 200.0])
+    g = _skew(x, bias=False)
+    assert abs(g) < 2 / np.sqrt(eg.ALPHA_MAX), 'sample is not symmetric enough'
+
+    a, b, d = eg.fit(x, method='mom')
+    assert a == eg.ALPHA_MAX
+    assert np.sqrt(a) * abs(b) == pytest.approx(np.std(x, ddof=1), rel=1e-12)
+    assert a * b + d == pytest.approx(np.mean(x), rel=1e-12)
+    assert np.sign(b) == np.sign(g)
+
+
+def test_mom_is_unchanged_below_the_ceiling():
+    """The two scale expressions agree where the shape is not capped, so an
+    ordinary sample must fit exactly as it did before."""
+    rng = np.random.default_rng(7)
+    x = rng.gamma(3.0, 2.0, 5000) + 50
+    g = _skew(x, bias=False)
+    a, b, d = eg.fit(x, method='mom')
+    assert a == 4 / g ** 2
+    assert b == np.std(x, ddof=1) * g / 2
+    assert d == np.mean(x) - a * b
+
+
+def test_unrepresentable_percentiles_are_rejected_not_clipped():
+    """Up to 1.2.0 a percentile outside the representable range was silently
+    moved to the nearest representable value, so the distribution evaluated was
+    not the one asked for."""
+    a, b, d = eg.params(100, 140, 300, P_LOW)
+    for bad in (0.0, 1.0, -0.1, 1.5, 1e-20, 1.0 - 1e-20):
+        with pytest.raises(ValueError):
+            eg.ppf(bad, a, b, d)
+
+    # A small but representable percentile is still honoured, and still inverts.
+    for p in (1e-12, 1e-6, 0.5, 1 - 1e-6):
+        x = eg.ppf(p, a, b, d)
+        assert eg.cdf(x, a, b, d) == pytest.approx(p, rel=1e-6, abs=1e-15)
+
+
+def test_low_prob_too_small_to_represent_is_rejected():
+    with pytest.raises(ValueError):
+        eg.params(100, 140, 300, 1e-20)
 
 
 def test_reflection_is_symmetric():
