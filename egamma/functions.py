@@ -44,30 +44,31 @@ MAX_ITER = 100
 
 #: Default approximation tolerance for a fit that reaches the shape ceiling.
 #:
-#: A ceiling fit is accepted only if the elicited values, recovered from the
-#: returned parameters, lie within this fraction of the elicited range. It is
-#: deliberately separate from :data:`TOLERANCE`: the ceiling error is set by
-#: ``alpha_max`` and the percentile convention, not by the search, and at
-#: ``alpha_max = 1e9`` it is about 1.5e-5 at P_L = 0.10. All five supported
-#: conventions (P_L = 0.01, 0.05, 0.10, 0.20, 0.25) meet this default; a
-#: symmetric estimate at a convention near the median, such as P_L = 0.4999,
-#: does not, and is refused rather than returned with an error of several per
-#: cent of the range.
+#: A ceiling fit is accepted only if its position residual ``|t_max - t|``,
+#: which is the normalised reproduction error in exact arithmetic, is at most
+#: this. It is deliberately separate from :data:`TOLERANCE`: the ceiling error
+#: is set by ``alpha_max`` and the percentile convention, not by the search,
+#: and at ``alpha_max = 1e9`` it is about 1.5e-5 at P_L = 0.10. All five
+#: supported conventions (P_L = 0.01, 0.05, 0.10, 0.20, 0.25) meet this
+#: default for a symmetric estimate; a convention near the median, such as
+#: P_L = 0.4999, does not, and its symmetric estimate is refused.
 CEILING_TOLERANCE = 2e-5
 
-#: Multiple of machine epsilon allowed for rounding in the reconstruction check.
+#: Factor in the estimate of rounding uncertainty in the reconstruction.
 #:
-#: The search stops on a position error below the tolerance, but the elicited
-#: values are then recovered through ordinary floating-point arithmetic, which
-#: adds rounding of order one ulp of the largest magnitude involved. Without an
-#: allowance, a fit that met the stopping criterion with little margin, or one
-#: whose values are large relative to their range, would be refused for
-#: rounding alone. The allowance is ``ROUNDING_ULPS * EPS * scale / span``,
-#: where ``scale`` is the largest magnitude among the elicited values, the
-#: location and the scaled quantiles. A sweep of about 38,000 ordinary fits
-#: needed at most 0.97 ulp; 4 leaves a margin for other arithmetic, such as
-#: Excel's, without admitting anything that is not rounding.
-ROUNDING_ULPS = 4
+#: The fit is judged on its position residual, which involves no location or
+#: scale and is not degraded by large values. The low, mode and high values are
+#: then reconstructed from the fitted parameters as a check on the floating-point
+#: computation, and that check carries rounding uncertainty of its own. It is
+#: estimated as ``ROUNDING_FACTOR * EPS * m / (high - low)``, where ``m`` is the
+#: largest magnitude among the elicited values, the location and the scaled
+#: quantiles. A first-order count of the roughly eight rounded operations in the
+#: reconstruction, each contributing at most half of ``EPS`` times a magnitude
+#: no larger than ``m``, gives a factor of about 4. That is an estimate, not a
+#: proven bound: it ignores higher-order terms and assumes IEEE double
+#: arithmetic. Empirically, across about 38,000 ordinary fits the largest
+#: discrepancy observed was 0.97 times ``EPS * m / (high - low)``.
+ROUNDING_FACTOR = 4
 
 #: Machine epsilon. Retained as a public name for code written against
 #: earlier versions; it no longer bounds the percentiles :func:`ppf` accepts,
@@ -408,11 +409,38 @@ class FitError(RuntimeError):
     """A three-point fit that could not be completed to the requested accuracy.
 
     Raised when the shape search does not converge, when a numerical step
-    produces a non-finite or invalid value, when the recovered elicited values
-    miss the acceptance tolerance, or when non-negative support was required and
-    the fitted distribution extends below zero. It subclasses
-    :class:`RuntimeError`, which is what ``params`` raised for non-convergence
-    in earlier versions, so existing handlers still catch it.
+    produces a non-finite or invalid value, when a ceiling fit's position
+    residual exceeds the ceiling tolerance, when the reconstructed values
+    disagree with the fit by more than the rounding uncertainty can explain, or
+    when non-negative support was required and the fitted distribution extends
+    below zero. It subclasses :class:`RuntimeError`, which is what ``params``
+    raised for non-convergence in earlier versions, so existing handlers still
+    catch it.
+
+    Where they were computed, the diagnostics are attached as
+    ``position_error``, ``max_error`` and ``verification_uncertainty``;
+    otherwise they are None.
+    """
+
+    def __init__(self, message, position_error=None, max_error=None,
+                 verification_uncertainty=None):
+        super().__init__(message)
+        self.position_error = position_error
+        self.max_error = max_error
+        self.verification_uncertainty = verification_uncertainty
+
+
+class PrecisionError(FitError):
+    """The fit cannot be verified to the requested accuracy in double precision.
+
+    The shape search may have succeeded, but the rounding uncertainty of the
+    reconstruction check, ``verification_uncertainty``, exceeds the tolerance
+    being verified, so a passing check would not establish the accuracy asked
+    for. This typically means the elicited values are very large relative to
+    their range: at the default tolerance, more than about 28,000 times it.
+    Either request a tolerance of at least ``verification_uncertainty``, or fit
+    the estimate in shifted units (for example after subtracting ``low``) and
+    shift the location back.
     """
 
 
@@ -426,16 +454,22 @@ class FitResult(tuple):
     the ceiling approximation can ask.
 
     :ivar bool ceiling: True when the estimate was too near symmetry for the
-        shape ceiling to resolve, so ``alpha_max`` was returned. The elicited
-        values are then reproduced to ``max_error``, accepted against the
-        ceiling tolerance rather than the ordinary one.
+        shape ceiling to resolve, so ``alpha_max`` was returned. Its position
+        residual was then accepted against the ceiling tolerance rather than
+        the ordinary one.
     :ivar str status: ``'converged'`` for an ordinary fit, ``'approximation'``
         for a ceiling fit.
     :ivar float position_error: ``|t_alpha - t|`` at the returned shape, the
         maximum normalised error in the reproduced values in exact arithmetic.
+        This is the quantity the fit is accepted on.
     :ivar float max_error: The largest absolute difference between the elicited
         and recovered low, mode and high values, divided by the elicited range,
-        as actually computed in floating point.
+        as actually computed in floating point. A diagnostic of the computation,
+        not the acceptance criterion.
+    :ivar float verification_uncertainty: The estimated rounding uncertainty of
+        ``max_error``, ``ROUNDING_FACTOR * EPS * m / (high - low)``. An
+        accepted result has this no larger than the tolerance applied, and
+        ``max_error`` within that tolerance plus this.
     :ivar bool support_below_zero: True when the fitted distribution has support
         below zero: always for a negative scale, whose support is unbounded
         below, and for a positive scale with a negative location. A converged
@@ -444,12 +478,14 @@ class FitResult(tuple):
     """
 
     def __new__(cls, alpha, beta, delta, ceiling=False, position_error=0.0,
-                iterations=0, max_error=0.0, support_below_zero=None):
+                iterations=0, max_error=0.0, support_below_zero=None,
+                verification_uncertainty=0.0):
         self = super().__new__(cls, (alpha, beta, delta))
         self.ceiling = ceiling
         self.status = 'approximation' if ceiling else 'converged'
         self.position_error = position_error
         self.max_error = max_error
+        self.verification_uncertainty = verification_uncertainty
         self.support_below_zero = bool(
             (beta < 0 or delta < 0) if support_below_zero is None
             else support_below_zero)
@@ -458,9 +494,37 @@ class FitResult(tuple):
 
     def __repr__(self):
         return ('FitResult(alpha=%r, beta=%r, delta=%r, status=%r, '
-                'max_error=%r, support_below_zero=%r)'
-                % (self[0], self[1], self[2], self.status, self.max_error,
-                   self.support_below_zero))
+                'position_error=%r, max_error=%r, support_below_zero=%r)'
+                % (self[0], self[1], self[2], self.status, self.position_error,
+                   self.max_error, self.support_below_zero))
+
+
+def _acceptance_failure(position_error, max_error, uncertainty, acceptance,
+                        strict):
+    """Apply the three acceptance rules in order; return the first one failed.
+
+    1. ``fit``: the position residual must be below ``acceptance`` (``strict``)
+       or at most it. This is the accuracy claim, in exact arithmetic, and no
+       rounding allowance is added to it.
+    2. ``precision``: the reconstruction's rounding uncertainty must be no
+       larger than ``acceptance``, or the check below cannot establish the
+       accuracy asked for.
+    3. ``consistency``: the reconstructed error must lie within ``acceptance``
+       plus that uncertainty, confirming that the floating-point computation
+       agrees with the fit.
+
+    :returns: ``None`` if all three hold, else ``'fit'``, ``'precision'`` or
+        ``'consistency'``.
+    """
+    if not np.isfinite(position_error) or (
+            position_error >= acceptance if strict
+            else position_error > acceptance):
+        return 'fit'
+    if not np.isfinite(uncertainty) or uncertainty > acceptance:
+        return 'precision'
+    if not np.isfinite(max_error) or max_error > acceptance + uncertainty:
+        return 'consistency'
+    return None
 
 
 def params(low, most_likely, high, low_prob=0.1, tolerance=TOLERANCE,
@@ -482,18 +546,26 @@ def params(low, most_likely, high, low_prob=0.1, tolerance=TOLERANCE,
     including a mode coinciding with an outer value where a mode-to-outer
     distance degenerates to zero over zero.
 
-    Once the parameters are found, the low, mode and high values are recovered
-    from them and compared with those elicited. The largest difference, as a
-    fraction of the range, must be within ``tolerance`` for an ordinary fit or
-    within ``ceiling_tolerance`` for a ceiling fit, in each case plus an
-    allowance of :data:`ROUNDING_ULPS` ulps for the rounding of the recovery
-    arithmetic itself. A fit that misses it raises :class:`FitError`; the
-    tolerance is never relaxed silently.
+    A result is accepted only if all of the following hold, where the
+    tolerance applied is ``tolerance`` for an ordinary fit and
+    ``ceiling_tolerance`` for a fit at the shape ceiling:
+
+    1. The position residual ``|t_alpha - t|``, which is the normalised
+       reproduction error in exact arithmetic, is within the tolerance. No
+       allowance is added to it.
+    2. The estimated rounding uncertainty of the reconstruction,
+       ``verification_uncertainty``, is no larger than the tolerance.
+       Otherwise :class:`PrecisionError` is raised: the accuracy asked for
+       cannot be verified in double precision.
+    3. The low, mode and high values reconstructed from the parameters agree
+       with those elicited to within the tolerance plus that uncertainty.
+
+    The tolerance is never relaxed silently.
 
     The returned object is a 3-tuple of ``(alpha, beta, delta)`` and unpacks as
-    one. It additionally carries ``status``, ``ceiling``, ``max_error``,
-    ``position_error``, ``support_below_zero`` and ``iterations``; see
-    :class:`FitResult`.
+    one. It additionally carries ``status``, ``ceiling``, ``position_error``,
+    ``max_error``, ``verification_uncertainty``, ``support_below_zero`` and
+    ``iterations``; see :class:`FitResult`.
 
     :param float low: The low estimate.
     :param float most_likely: The most likely estimate.
@@ -518,9 +590,12 @@ def params(low, most_likely, high, low_prob=0.1, tolerance=TOLERANCE,
     :raises ValueError: If the estimates are not finite, if low_prob is outside (0, 0.5),
         if a numerical control is out of range, or if the provided three-point estimate
         does not form a valid range.
+    :raises PrecisionError: If the requested accuracy cannot be verified in
+        double precision; see rule 2 above.
     :raises FitError: If the shape search does not converge, if a numerical step
-        fails, if the recovered values miss the acceptance tolerance, or if
-        ``require_nonnegative`` is set and the support extends below zero.
+        fails, if a ceiling fit misses ``ceiling_tolerance``, if the
+        reconstruction disagrees with the fit, or if ``require_nonnegative`` is
+        set and the support extends below zero.
     """
     for name, value in (('low', low), ('most_likely', most_likely), ('high', high)):
         if not np.isfinite(value):
@@ -610,15 +685,21 @@ def params(low, most_likely, high, low_prob=0.1, tolerance=TOLERANCE,
     max_error = max(abs(rec_low - low), abs(rec_mode - most_likely),
                     abs(rec_high - high)) / span
 
-    # Rounding in the recovery is of order one ulp of the largest magnitude in
-    # it, which can exceed the tolerance once divided by a small range.
-    scale = max(abs(low), abs(most_likely), abs(high), abs(delta),
-                abs(beta * q_low), abs(beta * q_high), abs((alpha - 1) * beta))
-    rounding_allowance = ROUNDING_ULPS * EPS * scale / span
+    # Estimated rounding uncertainty of max_error. The magnitude includes the
+    # location and the scaled quantiles, not only the elicited values, because
+    # at large shapes delta and (alpha - 1) * beta can be far larger than the
+    # elicited values and nearly cancel.
+    magnitude = max(abs(low), abs(most_likely), abs(high), abs(delta),
+                    abs(beta * q_low), abs(beta * q_high),
+                    abs((alpha - 1) * beta))
+    uncertainty = ROUNDING_FACTOR * EPS * magnitude / span
 
     acceptance = ceiling_tolerance if at_ceiling else tolerance
-    if not (np.isfinite(max_error)
-            and max_error <= acceptance + rounding_allowance):
+    failure = _acceptance_failure(position_error, max_error, uncertainty,
+                                  acceptance, strict=not at_ceiling)
+    diagnostics = dict(position_error=position_error, max_error=max_error,
+                       verification_uncertainty=uncertainty)
+    if failure == 'fit':
         if at_ceiling:
             raise FitError(
                 'The estimate is too near symmetry for alpha_max=%g to resolve '
@@ -626,12 +707,27 @@ def params(low, most_likely, high, low_prob=0.1, tolerance=TOLERANCE,
                 'reproduced only to %.3g of the range at low_prob=%g. Raise '
                 'ceiling_tolerance if that is acceptable, or use a Normal '
                 'distribution for a symmetric estimate.'
-                % (alpha_max, ceiling_tolerance, max_error, low_prob))
+                % (alpha_max, ceiling_tolerance, position_error, low_prob),
+                **diagnostics)
+        raise FitError('The position residual %.3g does not meet the '
+                       'tolerance of %g.' % (position_error, tolerance),
+                       **diagnostics)
+    if failure == 'precision':
+        raise PrecisionError(
+            'The fit cannot be verified to %g of the range in double precision: '
+            'the reconstruction carries an estimated rounding uncertainty of '
+            '%.3g of the range, because the values involved (up to %.3g) are '
+            'large relative to the range (%.3g). Request a tolerance of at '
+            'least %.3g, or fit in shifted units, for example after '
+            'subtracting low.'
+            % (acceptance, uncertainty, magnitude, span, uncertainty),
+            **diagnostics)
+    if failure == 'consistency':
         raise FitError(
-            'The recovered values miss the tolerance of %g: maximum error %.3g '
-            'of the range. Check that the elicited values and their '
-            'differences are representable at the precision used.'
-            % (tolerance, max_error))
+            'The reconstructed values disagree with the fit: maximum error '
+            '%.3g of the range, against a tolerance of %g and an estimated '
+            'rounding uncertainty of %.3g.' % (max_error, acceptance, uncertainty),
+            **diagnostics)
 
     support_below_zero = bool(beta < 0 or delta < 0)
     if require_nonnegative and support_below_zero:
@@ -640,7 +736,7 @@ def params(low, most_likely, high, low_prob=0.1, tolerance=TOLERANCE,
             'delta=%r), and non-negative support was required.' % (beta, delta))
 
     return FitResult(alpha, beta, delta, at_ceiling, position_error, iterations,
-                     max_error, support_below_zero)
+                     max_error, support_below_zero, uncertainty)
 
 
 def __find_alpha(low, mode, high, low_prob=0.1, tolerance=TOLERANCE,

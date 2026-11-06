@@ -39,6 +39,9 @@ class EgammaDistribution:
         #: Largest recovered-value error as a fraction of the range; ``None``
         #: if not fitted.
         self.max_error = None
+        #: Estimated rounding uncertainty of :attr:`max_error`; ``None`` if not
+        #: fitted.
+        self.verification_uncertainty = None
         #: Whether the fitted support extends below zero; ``None`` if not
         #: fitted.
         self.support_below_zero = None
@@ -54,6 +57,7 @@ class EgammaDistribution:
 
         The diagnostics :func:`~egamma.functions.params` returns are kept on
         the instance as :attr:`status`, :attr:`ceiling`, :attr:`max_error`,
+        :attr:`verification_uncertainty`,
         :attr:`position_error`, :attr:`support_below_zero` and
         :attr:`iterations`. Discarding them would make an estimate too near
         symmetry to resolve indistinguishable from one fitted to the
@@ -94,6 +98,7 @@ class EgammaDistribution:
         obj.iterations = result.iterations
         obj.status = result.status
         obj.max_error = result.max_error
+        obj.verification_uncertainty = result.verification_uncertainty
         obj.support_below_zero = result.support_below_zero
         return obj
 

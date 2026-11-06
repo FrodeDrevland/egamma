@@ -6,49 +6,59 @@
 accompanying paper does. **The fitted parameters are unchanged**: every
 estimate that 1.2.1 fitted and that 1.3.0 still accepts returns the same
 `(alpha, beta, delta)` bit for bit, and the conformance vectors are untouched.
-What changes is that some results 1.2.1 returned are now refused, and that the
-result reports more about itself.
+What changes is that some results 1.2.1 returned are now refused, each with a
+stated reason, and that the result reports more about itself.
+
+### Acceptance rules
+
+A result is accepted only if all three hold, where the tolerance is
+`tolerance` for an ordinary fit and `ceiling_tolerance` (new, default
+`CEILING_TOLERANCE = 2e-5`) for a fit at the shape ceiling:
+
+1. **Fit criterion.** The position residual `|t_alpha - t|`, which is the
+   normalised reproduction error in exact arithmetic, is within the tolerance.
+   No allowance is added. A ceiling fit that misses raises `FitError`.
+2. **Verifiability.** The reconstruction check's estimated rounding
+   uncertainty, `ROUNDING_FACTOR * EPS * m / (high - low)` with
+   `ROUNDING_FACTOR = 4` and `m` the largest magnitude among the elicited
+   values, the location and the scaled quantiles, is no larger than the
+   tolerance. Otherwise the check could not establish the accuracy asked for,
+   and `PrecisionError` (a `FitError`) is raised, stating the smallest
+   tolerance that could be verified.
+3. **Consistency.** The low, mode and high values reconstructed from the
+   parameters agree with those elicited to within the tolerance plus that
+   uncertainty. Otherwise `FitError`.
+
+The factor 4 comes from a first-order count of the rounded operations in the
+reconstruction. It is an estimate, not a proven bound. In a sweep of 40,000
+estimates the largest observed excess of the reconstructed error over the
+tolerance was 0.59 `EPS * m / (high - low)`, and no estimate failed rule 3.
 
 ### Changed
 
-- **The elicited values are recovered from the fitted parameters and checked.**
-  After the shape, scale and location are found, the low, mode and high values
-  are reconstructed from them and the largest difference from those elicited,
-  as a fraction of the range, is reported as `max_error`. An ordinary fit must
-  meet `tolerance`; a fit at the shape ceiling must meet the new
-  `ceiling_tolerance`. A fit that misses raises `FitError` rather than being
-  returned.
-- **A rounding allowance keeps the check from refusing exact fits.** The search
-  stops once the position error is below the tolerance, but the recovery is
-  ordinary floating-point arithmetic and adds rounding of about one ulp of the
-  largest magnitude involved. Divided by a small range, that can exceed the
-  tolerance: without an allowance, about 2–3% of the ordinary fits in a random
-  sweep, mostly estimates whose values are large relative to their range, would
-  have been refused for rounding alone. The acceptance bound is therefore the
-  tolerance plus `ROUNDING_ULPS` (4) machine epsilons of the largest magnitude
-  in the recovery, divided by the range. Across about 38,000 ordinary fits the
-  largest rounding needed was 0.97 ulp.
-- **Ceiling fits must meet `ceiling_tolerance`, default `CEILING_TOLERANCE =
-  2e-5`.** At `alpha_max = 1e9` all five supported percentile conventions meet
-  it. A symmetric estimate at a convention near the median does not — at
-  `low_prob = 0.4999` the values would be reproduced only to about 4.2% of the
-  range — and is now refused instead of returned. Pass a larger
-  `ceiling_tolerance` to accept it knowingly.
-- **Non-convergence and failed checks raise `FitError`**, a subclass of
-  `RuntimeError`, so handlers written for earlier versions still catch them.
-  Non-finite Gamma quantiles, an invalid quantile span, invalid fitted
-  parameters and an unordered reconstruction are now reported explicitly
-  rather than passed on.
+- **Ceiling fits must meet `ceiling_tolerance`.** At `alpha_max = 1e9` all five
+  supported percentile conventions meet the default for a symmetric estimate.
+  Outside about `0.001 <= low_prob <= 0.26` a symmetric estimate does not, and
+  is refused; at `low_prob = 0.4999` its residual is about 4.2% of the range.
+  A lower `alpha_max` needs a looser `ceiling_tolerance`.
+- **Estimates whose values are very large relative to their range are refused
+  as unverifiable** at the default tolerance once the values exceed about
+  28,000 times the range. 1.2.1 returned these without comment. Pass a looser
+  `tolerance`, or fit in shifted units and add the shift to the location.
+- **Failures raise `FitError`**, a subclass of `RuntimeError`, so handlers
+  written for earlier versions still catch them. Non-finite Gamma quantiles,
+  an invalid quantile span, invalid fitted parameters and an unordered
+  reconstruction are now reported explicitly.
 
 ### Added
 
-- `FitResult.status` (`'converged'` or `'approximation'`), `max_error` and
-  `support_below_zero`. The last is True for a negative scale, whose support is
-  unbounded below, and for a positive scale with a negative location: a
-  converged fit can still be unsuitable for a quantity that cannot be negative.
-- `require_nonnegative` on `params` and `EgammaDistribution.from_tpe`, which
-  turns that flag into a `FitError`.
-- `ceiling_tolerance` on both, and the new diagnostics on
+- `PrecisionError`, raised under rule 2.
+- `FitResult.status` (`'converged'` or `'approximation'`), `max_error` (the
+  reconstructed error, as computed), `verification_uncertainty` and
+  `support_below_zero`. `FitError` carries `position_error`, `max_error` and
+  `verification_uncertainty` where they were computed.
+- `ceiling_tolerance` and `require_nonnegative` on `params` and
+  `EgammaDistribution.from_tpe`, and the new diagnostics on
   `EgammaDistribution`.
 
 ## 1.2.1

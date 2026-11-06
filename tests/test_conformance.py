@@ -389,44 +389,186 @@ def test_unknown_fit_method_rejected():
         eg.fit([1.0, 2.0, 3.0], method='ols')
 
 
-# --- Acceptance check on the recovered values (1.3.0) ------------------------
+# --- Acceptance rules (1.3.0) -------------------------------------------------
+#
+# A result is accepted only if (1) its position residual meets the tolerance,
+# with no allowance; (2) the reconstruction's estimated rounding uncertainty is
+# no larger than that tolerance, else PrecisionError; and (3) the reconstructed
+# error lies within the tolerance plus that uncertainty.
+
+def _accepted_properly(r, acceptance):
+    assert r.position_error <= acceptance
+    assert r.verification_uncertainty <= acceptance
+    assert r.max_error <= acceptance + r.verification_uncertainty
+
 
 def test_status_and_diagnostics_are_reported():
     ordinary = eg.params(100, 140, 300, P_LOW)
     assert ordinary.status == 'converged'
-    assert ordinary.max_error <= BOUND
+    _accepted_properly(ordinary, BOUND)
     at_ceiling = eg.params(100, 200, 300, P_LOW)
     assert at_ceiling.status == 'approximation'
-    assert BOUND < at_ceiling.max_error <= eg.CEILING_TOLERANCE
+    assert BOUND < at_ceiling.position_error <= eg.CEILING_TOLERANCE
+    _accepted_properly(at_ceiling, eg.CEILING_TOLERANCE)
 
 
-def test_fit_error_is_a_runtime_error():
+def test_error_hierarchy():
     """Handlers written for the RuntimeError of earlier versions must still
-    catch every fit failure."""
+    catch every fit failure, and a precision failure must be distinguishable."""
     assert issubclass(eg.FitError, RuntimeError)
+    assert issubclass(eg.PrecisionError, eg.FitError)
 
 
-def test_rounding_in_the_recovery_does_not_refuse_a_converged_fit():
-    """The search meets the tolerance on the position; recovering the values
-    through floating-point arithmetic then adds rounding of order one ulp of the
-    largest magnitude involved. Divided by a small range that can exceed the
-    tolerance. Here it does, by a factor of about five, and the fit must still
-    be accepted, because nothing but rounding separates it from exact."""
-    low, mode, high = 5e5, 5e5 + 0.1, 5e5 + 0.5
-    r = eg.params(low, mode, high, P_LOW)
+# Reported counterexample: the reconstruction allowance must never stand in for
+# the fit criterion.
+
+def test_reported_counterexample_is_refused():
+    """At 1e14 with a range of 2 the rounding estimate is about 0.044 of the
+    range, larger than the ceiling tolerance by three orders of magnitude. In
+    the first draft of 1.3.0 it was added to the tolerance, and the ceiling fit,
+    whose own residual is 0.042, was accepted. It must be refused on the
+    residual, which carries no allowance."""
+    with pytest.raises(eg.FitError) as info:
+        eg.params(1e14, 1e14 + 1, 1e14 + 2, low_prob=0.4999)
+    assert not isinstance(info.value, eg.PrecisionError)
+    assert info.value.position_error == pytest.approx(0.04205221, rel=1e-6)
+    assert info.value.position_error > eg.CEILING_TOLERANCE
+
+
+def test_reported_counterexample_accepted_only_at_the_tolerance_it_meets():
+    r = eg.params(1e14, 1e14 + 1, 1e14 + 2, low_prob=0.4999,
+                  ceiling_tolerance=0.05)
+    assert r.status == 'approximation'
+    _accepted_properly(r, 0.05)
+    with pytest.raises(eg.FitError):
+        eg.params(1e14, 1e14 + 1, 1e14 + 2, low_prob=0.4999,
+                  ceiling_tolerance=0.04)
+
+
+def test_ceiling_fit_judged_on_its_residual_at_ordinary_magnitudes():
+    with pytest.raises(eg.FitError) as info:
+        eg.params(100, 200, 300, 0.4999)
+    assert not isinstance(info.value, eg.PrecisionError)
+    r = eg.params(100, 200, 300, 0.4999, ceiling_tolerance=0.05)
+    assert r.position_error == pytest.approx(0.04205221, rel=1e-4)
+    _accepted_properly(r, 0.05)
+
+
+# Large offsets with narrow ranges.
+
+@pytest.mark.parametrize("low,mode,high", [
+    (1e14, 1e14 + 0.5, 1e14 + 2),
+    (5e5, 5e5 + 0.1, 5e5 + 0.5),
+    (1e6, 1e6 + 0.3, 1e6 + 1),
+    (-2e7, -2e7 + 0.37, -2e7 + 1),
+])
+def test_unverifiable_accuracy_is_refused_with_precision_error(low, mode, high):
+    """The search succeeds, but at these offsets double precision cannot verify
+    2.5e-11 of the range. That must be said, not passed off as a converged fit.
+    The error reports the smallest tolerance that could be verified, and
+    requesting a tolerance above it succeeds."""
+    with pytest.raises(eg.PrecisionError) as info:
+        eg.params(low, mode, high, P_LOW)
+    needed = info.value.verification_uncertainty
+    assert needed > BOUND
+    r = eg.params(low, mode, high, P_LOW, tolerance=2 * needed)
     assert r.status == 'converged'
-    assert r.position_error < BOUND
+    _accepted_properly(r, 2 * needed)
+
+
+def test_offset_alone_is_not_a_reason_to_refuse():
+    """Large values with a proportionate range are verifiable."""
+    for low in (1e6, 1e9, 1e12):
+        r = eg.params(low, low * 1.2, low * 2, P_LOW)
+        assert r.status == 'converged'
+        _accepted_properly(r, BOUND)
+
+
+def test_verifiability_threshold_tracks_the_offset_ratio():
+    """At default tolerance the estimate becomes unverifiable once the values
+    exceed about 28,000 times the range."""
+    eg.params(2e4 * 200, 2e4 * 200 + 50, 2e4 * 200 + 200, P_LOW)
+    with pytest.raises(eg.PrecisionError):
+        eg.params(4e4 * 200, 4e4 * 200 + 50, 4e4 * 200 + 200, P_LOW)
+
+
+# Cancellation at large shapes.
+
+@pytest.mark.parametrize("p", [0.01, 0.10, 0.25])
+def test_cancellation_at_large_shapes(p):
+    """Near symmetry the location is in the hundreds of thousands or more while
+    the elicited values are hundreds, and delta + (alpha - 1) * beta nearly
+    cancels. The uncertainty estimate must account for that magnitude, and the
+    fit must still pass."""
+    r = eg.params(100, 200 - 200 * 10 ** -4.5, 300, p)
+    assert r.status == 'converged' and r[0] > 1e7
+    assert abs(r[2]) > 1e5
+    inputs_only = eg.ROUNDING_FACTOR * eg.EPS * 300 / 200
+    assert r.verification_uncertainty > 100 * inputs_only
+    _accepted_properly(r, BOUND)
+
+
+# Ordinary fits stopping just inside tolerance, and reflection.
+
+@pytest.mark.parametrize("mode", [1000.718, 1000.282])
+def test_fit_stopping_just_inside_tolerance(mode):
+    """The search stops at a residual of 0.9996 tolerance; the reconstruction
+    then reads 1.0004 tolerance. Rule 1 holds, the excess is far inside the
+    rounding estimate, and the fit is accepted. The mirrored estimate behaves
+    identically."""
+    r = eg.params(1000.0, mode, 1001.0, P_LOW)
+    assert r.status == 'converged'
+    assert 0.999 * BOUND < r.position_error < BOUND
     assert r.max_error > BOUND
-    allowance = eg.ROUNDING_ULPS * eg.EPS * 5e5 * 2 / (high - low)
-    assert r.max_error <= BOUND + allowance
+    _accepted_properly(r, BOUND)
+
+
+@pytest.mark.parametrize("low,mode,high", [
+    (100, 140, 300), (1000.0, 1000.282, 1001.0), (100, 100, 300),
+    (100, 200 - 200 * 10 ** -4.5, 300), (1e6, 1e6 + 0.3, 1e6 + 1),
+])
+def test_reflection_gives_the_same_acceptance_outcome(low, mode, high):
+    mirrored = low + high - mode
+    outcomes = []
+    for m in (mode, mirrored):
+        try:
+            r = eg.params(low, m, high, P_LOW)
+            outcomes.append(('ok', r.status, r.position_error))
+        except eg.PrecisionError:
+            outcomes.append(('precision',))
+    assert outcomes[0][:2] == outcomes[1][:2]
+    if outcomes[0][0] == 'ok':
+        assert outcomes[0][2] == pytest.approx(outcomes[1][2], rel=1e-6,
+                                               abs=1e-15)
+
+
+# The three rules, exercised directly.
+
+def test_acceptance_rules_in_order():
+    judge = eg.functions._acceptance_failure
+    tol = 1e-10
+    assert judge(0.5 * tol, 0.5 * tol, 0.1 * tol, tol, strict=True) is None
+    # Rule 1 carries no allowance, however large the uncertainty.
+    assert judge(1.01 * tol, 0.0, 0.0, tol, strict=True) == 'fit'
+    assert judge(tol, 0.0, 0.0, tol, strict=True) == 'fit'
+    assert judge(tol, 0.0, 0.0, tol, strict=False) is None
+    # Rule 2: uncertainty larger than the tolerance cannot verify it.
+    assert judge(0.5 * tol, 0.5 * tol, 1.01 * tol, tol, strict=True) == 'precision'
+    # Rule 3: a reconstruction beyond tolerance plus uncertainty is refused.
+    assert judge(0.5 * tol, 1.21 * tol, 0.2 * tol, tol, strict=True) == 'consistency'
+    assert judge(0.5 * tol, 1.19 * tol, 0.2 * tol, tol, strict=True) is None
+    assert judge(float('nan'), 0.0, 0.0, tol, strict=True) == 'fit'
+    assert judge(0.5 * tol, float('nan'), 0.0, tol, strict=True) == 'consistency'
 
 
 @pytest.mark.parametrize("p", [0.01, 0.05, 0.10, 0.20, 0.25])
-def test_no_ordinary_fit_is_refused_across_magnitudes(p):
-    """A sweep over location, range and mode position, weighted towards the
-    endpoints and near-symmetry. Every estimate the search resolves must pass
-    the acceptance check."""
+def test_sweep_outcomes_are_accounted_for(p):
+    """Across location, range and mode position, every result is either
+    accepted under all three rules or refused as unverifiable with an
+    uncertainty that really exceeds the tolerance. Nothing is refused on
+    consistency, which would mean the uncertainty estimate is too small."""
     rng = np.random.default_rng(int(p * 1000))
+    accepted = refused = 0
     for _ in range(400):
         low = rng.uniform(-1e6, 1e6) * 10 ** rng.uniform(-6, 3)
         span = 10 ** rng.uniform(-4, 7)
@@ -436,26 +578,24 @@ def test_no_ordinary_fit_is_refused_across_magnitudes(p):
         mode = low + t * span if rng.random() < 0.5 else high - t * span
         if not (low <= mode <= high and low < high):
             continue
-        r = eg.params(low, mode, high, p)
-        assert r.status in ('converged', 'approximation')
-
-
-def test_ceiling_fit_outside_the_ceiling_tolerance_is_refused():
-    """At P_L = 0.4999 a symmetric estimate is reproduced only to about 4.2% of
-    the range at alpha_max = 1e9. That is refused by default, not returned as
-    though it were a fit, and is accepted only on explicit request."""
-    with pytest.raises(eg.FitError):
-        eg.params(100, 200, 300, 0.4999)
-    r = eg.params(100, 200, 300, 0.4999, ceiling_tolerance=0.05)
-    assert r.status == 'approximation'
-    assert r.max_error == pytest.approx(0.04205221, rel=1e-4)
+        try:
+            r = eg.params(low, mode, high, p)
+        except eg.PrecisionError as e:
+            assert e.verification_uncertainty > BOUND
+            # Only values far larger than their range may be unverifiable.
+            assert max(abs(low), abs(high)) / span > 1e3
+            refused += 1
+            continue
+        _accepted_properly(r, eg.CEILING_TOLERANCE if r.ceiling else BOUND)
+        accepted += 1
+    assert accepted > 200 and refused > 0
 
 
 @pytest.mark.parametrize("p", [0.01, 0.05, 0.10, 0.20, 0.25])
 def test_supported_conventions_meet_the_default_ceiling_tolerance(p):
     r = eg.params(100, 200, 300, p)
     assert r.status == 'approximation'
-    assert r.max_error <= eg.CEILING_TOLERANCE
+    assert r.position_error <= eg.CEILING_TOLERANCE
 
 
 def test_ceiling_tolerance_validated():
@@ -482,9 +622,10 @@ def test_distribution_class_carries_the_acceptance_diagnostics():
     d = eg.EgammaDistribution.from_tpe(100, 260, 300, P_LOW)
     assert d.status == 'converged'
     assert d.support_below_zero is True
-    assert d.max_error <= BOUND
+    assert d.max_error <= BOUND + d.verification_uncertainty
     with pytest.raises(eg.FitError):
         eg.EgammaDistribution.from_tpe(100, 260, 300, P_LOW,
                                        require_nonnegative=True)
     direct = eg.EgammaDistribution(2.0, 3.0, 4.0)
     assert direct.status is None and direct.max_error is None
+    assert direct.verification_uncertainty is None
