@@ -42,6 +42,33 @@ THRESHOLD = TOLERANCE
 #: Maximum bisection steps before reporting failure.
 MAX_ITER = 100
 
+#: Default approximation tolerance for a fit that reaches the shape ceiling.
+#:
+#: A ceiling fit is accepted only if the elicited values, recovered from the
+#: returned parameters, lie within this fraction of the elicited range. It is
+#: deliberately separate from :data:`TOLERANCE`: the ceiling error is set by
+#: ``alpha_max`` and the percentile convention, not by the search, and at
+#: ``alpha_max = 1e9`` it is about 1.5e-5 at P_L = 0.10. All five supported
+#: conventions (P_L = 0.01, 0.05, 0.10, 0.20, 0.25) meet this default; a
+#: symmetric estimate at a convention near the median, such as P_L = 0.4999,
+#: does not, and is refused rather than returned with an error of several per
+#: cent of the range.
+CEILING_TOLERANCE = 2e-5
+
+#: Multiple of machine epsilon allowed for rounding in the reconstruction check.
+#:
+#: The search stops on a position error below the tolerance, but the elicited
+#: values are then recovered through ordinary floating-point arithmetic, which
+#: adds rounding of order one ulp of the largest magnitude involved. Without an
+#: allowance, a fit that met the stopping criterion with little margin, or one
+#: whose values are large relative to their range, would be refused for
+#: rounding alone. The allowance is ``ROUNDING_ULPS * EPS * scale / span``,
+#: where ``scale`` is the largest magnitude among the elicited values, the
+#: location and the scaled quantiles. A sweep of about 38,000 ordinary fits
+#: needed at most 0.97 ulp; 4 leaves a margin for other arithmetic, such as
+#: Excel's, without admitting anything that is not rounding.
+ROUNDING_ULPS = 4
+
 #: Machine epsilon. Retained as a public name for code written against
 #: earlier versions; it no longer bounds the percentiles :func:`ppf` accepts,
 #: which are tested against their own complements instead.
@@ -377,6 +404,18 @@ def fit(data, method='mle'):
     raise ValueError("method must be 'mle' or 'mom', not %r" % (method,))
 
 
+class FitError(RuntimeError):
+    """A three-point fit that could not be completed to the requested accuracy.
+
+    Raised when the shape search does not converge, when a numerical step
+    produces a non-finite or invalid value, when the recovered elicited values
+    miss the acceptance tolerance, or when non-negative support was required and
+    the fitted distribution extends below zero. It subclasses
+    :class:`RuntimeError`, which is what ``params`` raised for non-convergence
+    in earlier versions, so existing handlers still catch it.
+    """
+
+
 class FitResult(tuple):
     """The fitted ``(alpha, beta, delta)``, with diagnostics attached.
 
@@ -388,29 +427,45 @@ class FitResult(tuple):
 
     :ivar bool ceiling: True when the estimate was too near symmetry for the
         shape ceiling to resolve, so ``alpha_max`` was returned. The elicited
-        values are then reproduced to ``position_error`` rather than to the
-        requested tolerance.
+        values are then reproduced to ``max_error``, accepted against the
+        ceiling tolerance rather than the ordinary one.
+    :ivar str status: ``'converged'`` for an ordinary fit, ``'approximation'``
+        for a ceiling fit.
     :ivar float position_error: ``|t_alpha - t|`` at the returned shape, the
         maximum normalised error in the reproduced values in exact arithmetic.
+    :ivar float max_error: The largest absolute difference between the elicited
+        and recovered low, mode and high values, divided by the elicited range,
+        as actually computed in floating point.
+    :ivar bool support_below_zero: True when the fitted distribution has support
+        below zero: always for a negative scale, whose support is unbounded
+        below, and for a positive scale with a negative location. A converged
+        fit can still be unsuitable for a quantity that cannot be negative.
     :ivar int iterations: Bisection steps used; zero when the ceiling was taken.
     """
 
     def __new__(cls, alpha, beta, delta, ceiling=False, position_error=0.0,
-                iterations=0):
+                iterations=0, max_error=0.0, support_below_zero=None):
         self = super().__new__(cls, (alpha, beta, delta))
         self.ceiling = ceiling
+        self.status = 'approximation' if ceiling else 'converged'
         self.position_error = position_error
+        self.max_error = max_error
+        self.support_below_zero = bool(
+            (beta < 0 or delta < 0) if support_below_zero is None
+            else support_below_zero)
         self.iterations = iterations
         return self
 
     def __repr__(self):
-        return ('FitResult(alpha=%r, beta=%r, delta=%r, ceiling=%r, '
-                'position_error=%r)' % (self[0], self[1], self[2],
-                                        self.ceiling, self.position_error))
+        return ('FitResult(alpha=%r, beta=%r, delta=%r, status=%r, '
+                'max_error=%r, support_below_zero=%r)'
+                % (self[0], self[1], self[2], self.status, self.max_error,
+                   self.support_below_zero))
 
 
 def params(low, most_likely, high, low_prob=0.1, tolerance=TOLERANCE,
-           alpha_max=ALPHA_MAX, max_iter=MAX_ITER):
+           alpha_max=ALPHA_MAX, max_iter=MAX_ITER,
+           ceiling_tolerance=CEILING_TOLERANCE, require_nonnegative=False):
     """
     Find the parameters of the expanded gamma distribution given a three-point estimate.
 
@@ -427,9 +482,18 @@ def params(low, most_likely, high, low_prob=0.1, tolerance=TOLERANCE,
     including a mode coinciding with an outer value where a mode-to-outer
     distance degenerates to zero over zero.
 
+    Once the parameters are found, the low, mode and high values are recovered
+    from them and compared with those elicited. The largest difference, as a
+    fraction of the range, must be within ``tolerance`` for an ordinary fit or
+    within ``ceiling_tolerance`` for a ceiling fit, in each case plus an
+    allowance of :data:`ROUNDING_ULPS` ulps for the rounding of the recovery
+    arithmetic itself. A fit that misses it raises :class:`FitError`; the
+    tolerance is never relaxed silently.
+
     The returned object is a 3-tuple of ``(alpha, beta, delta)`` and unpacks as
-    one. It additionally carries ``ceiling``, ``position_error`` and
-    ``iterations``; see :class:`FitResult`.
+    one. It additionally carries ``status``, ``ceiling``, ``max_error``,
+    ``position_error``, ``support_below_zero`` and ``iterations``; see
+    :class:`FitResult`.
 
     :param float low: The low estimate.
     :param float most_likely: The most likely estimate.
@@ -441,6 +505,12 @@ def params(low, most_likely, high, low_prob=0.1, tolerance=TOLERANCE,
         Defaults to :data:`TOLERANCE`.
     :param float alpha_max: The shape ceiling. Defaults to :data:`ALPHA_MAX`.
     :param int max_iter: Maximum bisection steps. Defaults to :data:`MAX_ITER`.
+    :param float ceiling_tolerance: Approximation tolerance for a fit that
+        reaches the shape ceiling, as a fraction of the elicited range.
+        Defaults to :data:`CEILING_TOLERANCE`.
+    :param bool require_nonnegative: If True, a fit whose distribution has
+        support below zero raises :class:`FitError` instead of being returned
+        with ``support_below_zero`` set. Defaults to False.
 
     :return: The shape (alpha), scale (beta) and location (delta) parameters.
     :rtype: FitResult
@@ -448,7 +518,9 @@ def params(low, most_likely, high, low_prob=0.1, tolerance=TOLERANCE,
     :raises ValueError: If the estimates are not finite, if low_prob is outside (0, 0.5),
         if a numerical control is out of range, or if the provided three-point estimate
         does not form a valid range.
-    :raises RuntimeError: If the shape search does not converge.
+    :raises FitError: If the shape search does not converge, if a numerical step
+        fails, if the recovered values miss the acceptance tolerance, or if
+        ``require_nonnegative`` is set and the support extends below zero.
     """
     for name, value in (('low', low), ('most_likely', most_likely), ('high', high)):
         if not np.isfinite(value):
@@ -469,6 +541,10 @@ def params(low, most_likely, high, low_prob=0.1, tolerance=TOLERANCE,
     if not (np.isfinite(tolerance) and 0 < tolerance < 0.5):
         raise ValueError('Invalid tolerance: must satisfy 0 < tolerance < 0.5')
 
+    if not (np.isfinite(ceiling_tolerance) and 0 < ceiling_tolerance < 0.5):
+        raise ValueError(
+            'Invalid ceiling_tolerance: must satisfy 0 < ceiling_tolerance < 0.5')
+
     if not (np.isfinite(alpha_max) and alpha_max > 1):
         raise ValueError('Invalid alpha_max: must be finite and greater than 1')
 
@@ -485,24 +561,86 @@ def params(low, most_likely, high, low_prob=0.1, tolerance=TOLERANCE,
             msg += "'high' must be greater than 'low'"
         raise ValueError(msg)
 
+    span = high - low
+    if not np.isfinite(span):
+        raise ValueError(
+            'Invalid three-point-estimate: high - low overflows double precision')
+
     alpha, iterations, at_ceiling, position_error = __find_alpha(
         low, most_likely, high, low_prob, tolerance, alpha_max, max_iter)
 
     if alpha is None:
-        raise RuntimeError(
+        raise FitError(
             'Fit did not converge: the requested tolerance of %g could not be '
             'met within %d iterations. Try a looser tolerance, or check that '
             'the arithmetic can represent the elicited values and their '
             'differences.' % (tolerance, max_iter))
 
-    beta = (high - low) / (ppf(1 - low_prob, alpha) - ppf(low_prob, alpha))
+    q_low = float(gammaincinv(alpha, low_prob))
+    q_high = float(gammaincinv(alpha, 1 - low_prob))
+    if not (np.isfinite(q_low) and np.isfinite(q_high)):
+        raise FitError('Gamma quantile evaluation failed at alpha=%r' % alpha)
+    quantile_span = q_high - q_low
+    if not (np.isfinite(quantile_span) and quantile_span > 0):
+        raise FitError('Invalid Gamma quantile span at alpha=%r' % alpha)
 
+    beta = span / quantile_span
     if (most_likely - low) > (high - most_likely):
         beta = -beta
-
     delta = most_likely - (alpha - 1) * beta
 
-    return FitResult(alpha, beta, delta, at_ceiling, position_error, iterations)
+    if not (np.isfinite(alpha) and np.isfinite(beta) and np.isfinite(delta)
+            and alpha > 1 and beta != 0):
+        raise FitError('Invalid fitted parameters (%r, %r, %r)'
+                       % (alpha, beta, delta))
+
+    # Recover the elicited values from the fitted parameters. Under reflection
+    # the lower elicited value comes from the upper standard quantile.
+    if beta > 0:
+        rec_low, rec_high = delta + beta * q_low, delta + beta * q_high
+    else:
+        rec_low, rec_high = delta + beta * q_high, delta + beta * q_low
+    rec_mode = delta + (alpha - 1) * beta
+    if not (np.isfinite(rec_low) and np.isfinite(rec_mode)
+            and np.isfinite(rec_high)):
+        raise FitError('Reconstruction of the elicited values failed')
+    if rec_low >= rec_high:
+        raise FitError('Reconstructed low and high values are not ordered')
+
+    max_error = max(abs(rec_low - low), abs(rec_mode - most_likely),
+                    abs(rec_high - high)) / span
+
+    # Rounding in the recovery is of order one ulp of the largest magnitude in
+    # it, which can exceed the tolerance once divided by a small range.
+    scale = max(abs(low), abs(most_likely), abs(high), abs(delta),
+                abs(beta * q_low), abs(beta * q_high), abs((alpha - 1) * beta))
+    rounding_allowance = ROUNDING_ULPS * EPS * scale / span
+
+    acceptance = ceiling_tolerance if at_ceiling else tolerance
+    if not (np.isfinite(max_error)
+            and max_error <= acceptance + rounding_allowance):
+        if at_ceiling:
+            raise FitError(
+                'The estimate is too near symmetry for alpha_max=%g to resolve '
+                'within ceiling_tolerance=%g: the elicited values would be '
+                'reproduced only to %.3g of the range at low_prob=%g. Raise '
+                'ceiling_tolerance if that is acceptable, or use a Normal '
+                'distribution for a symmetric estimate.'
+                % (alpha_max, ceiling_tolerance, max_error, low_prob))
+        raise FitError(
+            'The recovered values miss the tolerance of %g: maximum error %.3g '
+            'of the range. Check that the elicited values and their '
+            'differences are representable at the precision used.'
+            % (tolerance, max_error))
+
+    support_below_zero = bool(beta < 0 or delta < 0)
+    if require_nonnegative and support_below_zero:
+        raise FitError(
+            'The fitted distribution has support below zero (beta=%r, '
+            'delta=%r), and non-negative support was required.' % (beta, delta))
+
+    return FitResult(alpha, beta, delta, at_ceiling, position_error, iterations,
+                     max_error, support_below_zero)
 
 
 def __find_alpha(low, mode, high, low_prob=0.1, tolerance=TOLERANCE,

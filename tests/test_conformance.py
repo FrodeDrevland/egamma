@@ -261,7 +261,12 @@ def test_distribution_class_keeps_the_fit_diagnostics():
 def test_distribution_class_exposes_the_numerical_controls():
     """alpha_max is an implementation choice, not a universal constant, so the
     object interface must allow it to be set as the functional one does."""
-    d = eg.EgammaDistribution.from_tpe(100, 200, 300, P_LOW, alpha_max=1e6)
+    # A lower ceiling reproduces a symmetric estimate less well (about 4.7e-4
+    # of the range at 1e6), which the default ceiling tolerance refuses.
+    with pytest.raises(eg.FitError):
+        eg.EgammaDistribution.from_tpe(100, 200, 300, P_LOW, alpha_max=1e6)
+    d = eg.EgammaDistribution.from_tpe(100, 200, 300, P_LOW, alpha_max=1e6,
+                                       ceiling_tolerance=1e-3)
     assert d.alpha == 1e6
     assert d.ceiling is True
     with pytest.raises(ValueError):
@@ -382,3 +387,104 @@ def test_mom_and_mle_agree_on_a_large_sample():
 def test_unknown_fit_method_rejected():
     with pytest.raises(ValueError):
         eg.fit([1.0, 2.0, 3.0], method='ols')
+
+
+# --- Acceptance check on the recovered values (1.3.0) ------------------------
+
+def test_status_and_diagnostics_are_reported():
+    ordinary = eg.params(100, 140, 300, P_LOW)
+    assert ordinary.status == 'converged'
+    assert ordinary.max_error <= BOUND
+    at_ceiling = eg.params(100, 200, 300, P_LOW)
+    assert at_ceiling.status == 'approximation'
+    assert BOUND < at_ceiling.max_error <= eg.CEILING_TOLERANCE
+
+
+def test_fit_error_is_a_runtime_error():
+    """Handlers written for the RuntimeError of earlier versions must still
+    catch every fit failure."""
+    assert issubclass(eg.FitError, RuntimeError)
+
+
+def test_rounding_in_the_recovery_does_not_refuse_a_converged_fit():
+    """The search meets the tolerance on the position; recovering the values
+    through floating-point arithmetic then adds rounding of order one ulp of the
+    largest magnitude involved. Divided by a small range that can exceed the
+    tolerance. Here it does, by a factor of about five, and the fit must still
+    be accepted, because nothing but rounding separates it from exact."""
+    low, mode, high = 5e5, 5e5 + 0.1, 5e5 + 0.5
+    r = eg.params(low, mode, high, P_LOW)
+    assert r.status == 'converged'
+    assert r.position_error < BOUND
+    assert r.max_error > BOUND
+    allowance = eg.ROUNDING_ULPS * eg.EPS * 5e5 * 2 / (high - low)
+    assert r.max_error <= BOUND + allowance
+
+
+@pytest.mark.parametrize("p", [0.01, 0.05, 0.10, 0.20, 0.25])
+def test_no_ordinary_fit_is_refused_across_magnitudes(p):
+    """A sweep over location, range and mode position, weighted towards the
+    endpoints and near-symmetry. Every estimate the search resolves must pass
+    the acceptance check."""
+    rng = np.random.default_rng(int(p * 1000))
+    for _ in range(400):
+        low = rng.uniform(-1e6, 1e6) * 10 ** rng.uniform(-6, 3)
+        span = 10 ** rng.uniform(-4, 7)
+        t = rng.choice([rng.uniform(0, 0.5), 10 ** rng.uniform(-13, -1),
+                        0.5 - 10 ** rng.uniform(-4, -1), 0.0])
+        high = low + span
+        mode = low + t * span if rng.random() < 0.5 else high - t * span
+        if not (low <= mode <= high and low < high):
+            continue
+        r = eg.params(low, mode, high, p)
+        assert r.status in ('converged', 'approximation')
+
+
+def test_ceiling_fit_outside_the_ceiling_tolerance_is_refused():
+    """At P_L = 0.4999 a symmetric estimate is reproduced only to about 4.2% of
+    the range at alpha_max = 1e9. That is refused by default, not returned as
+    though it were a fit, and is accepted only on explicit request."""
+    with pytest.raises(eg.FitError):
+        eg.params(100, 200, 300, 0.4999)
+    r = eg.params(100, 200, 300, 0.4999, ceiling_tolerance=0.05)
+    assert r.status == 'approximation'
+    assert r.max_error == pytest.approx(0.04205221, rel=1e-4)
+
+
+@pytest.mark.parametrize("p", [0.01, 0.05, 0.10, 0.20, 0.25])
+def test_supported_conventions_meet_the_default_ceiling_tolerance(p):
+    r = eg.params(100, 200, 300, p)
+    assert r.status == 'approximation'
+    assert r.max_error <= eg.CEILING_TOLERANCE
+
+
+def test_ceiling_tolerance_validated():
+    for bad in (0.0, -1e-6, 0.5, 1.0, float('nan'), float('inf')):
+        with pytest.raises(ValueError):
+            eg.params(100, 140, 300, P_LOW, ceiling_tolerance=bad)
+
+
+def test_support_below_zero_is_flagged_and_can_be_required():
+    right = eg.params(100, 140, 300, P_LOW)       # delta about 52
+    assert right.support_below_zero is False
+    left = eg.params(100, 260, 300, P_LOW)        # negative scale
+    assert left.support_below_zero is True
+    wide = eg.params(1, 2, 300, P_LOW)            # positive scale, delta < 0
+    assert wide[1] > 0 and wide[2] < 0 and wide.support_below_zero is True
+
+    assert eg.params(100, 140, 300, P_LOW, require_nonnegative=True) == right
+    for estimate in ((100, 260, 300), (1, 2, 300)):
+        with pytest.raises(eg.FitError):
+            eg.params(*estimate, P_LOW, require_nonnegative=True)
+
+
+def test_distribution_class_carries_the_acceptance_diagnostics():
+    d = eg.EgammaDistribution.from_tpe(100, 260, 300, P_LOW)
+    assert d.status == 'converged'
+    assert d.support_below_zero is True
+    assert d.max_error <= BOUND
+    with pytest.raises(eg.FitError):
+        eg.EgammaDistribution.from_tpe(100, 260, 300, P_LOW,
+                                       require_nonnegative=True)
+    direct = eg.EgammaDistribution(2.0, 3.0, 4.0)
+    assert direct.status is None and direct.max_error is None

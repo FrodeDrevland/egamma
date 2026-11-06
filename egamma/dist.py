@@ -34,16 +34,27 @@ class EgammaDistribution:
         self.position_error = None
         #: Bisection steps used by the fit; ``None`` if not fitted.
         self.iterations = None
+        #: ``'converged'`` or ``'approximation'``; ``None`` if not fitted.
+        self.status = None
+        #: Largest recovered-value error as a fraction of the range; ``None``
+        #: if not fitted.
+        self.max_error = None
+        #: Whether the fitted support extends below zero; ``None`` if not
+        #: fitted.
+        self.support_below_zero = None
 
     @classmethod
     def from_tpe(cls, low, most_likely, high, low_prob=0.1,
                  tolerance=core.TOLERANCE, alpha_max=core.ALPHA_MAX,
-                 max_iter=core.MAX_ITER):
+                 max_iter=core.MAX_ITER,
+                 ceiling_tolerance=core.CEILING_TOLERANCE,
+                 require_nonnegative=False):
         """
         Create an EgammaDistribution instance from a three-point estimate.
 
         The diagnostics :func:`~egamma.functions.params` returns are kept on
-        the instance as :attr:`ceiling`, :attr:`position_error` and
+        the instance as :attr:`status`, :attr:`ceiling`, :attr:`max_error`,
+        :attr:`position_error`, :attr:`support_below_zero` and
         :attr:`iterations`. Discarding them would make an estimate too near
         symmetry to resolve indistinguishable from one fitted to the
         tolerance, which is the silence the diagnostics exist to break.
@@ -64,16 +75,26 @@ class EgammaDistribution:
         :type alpha_max: float, optional
         :param max_iter: Maximum bisection steps before reporting failure.
         :type max_iter: int, optional
+        :param ceiling_tolerance: Approximation tolerance for a ceiling fit.
+        :type ceiling_tolerance: float, optional
+        :param require_nonnegative: Refuse a fit whose support extends below
+            zero.
+        :type require_nonnegative: bool, optional
         :returns: An instance of EgammaDistribution.
         :rtype: EgammaDistribution
         """
         result = core.params(low, most_likely, high, low_prob,
                              tolerance=tolerance, alpha_max=alpha_max,
-                             max_iter=max_iter)
+                             max_iter=max_iter,
+                             ceiling_tolerance=ceiling_tolerance,
+                             require_nonnegative=require_nonnegative)
         obj = cls(*result)
         obj.ceiling = result.ceiling
         obj.position_error = result.position_error
         obj.iterations = result.iterations
+        obj.status = result.status
+        obj.max_error = result.max_error
+        obj.support_below_zero = result.support_below_zero
         return obj
 
     @classmethod
