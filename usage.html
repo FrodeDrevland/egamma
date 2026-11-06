@@ -1,0 +1,217 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Installation and Usage &mdash; egamma 1.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=fc837d61"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="author" title="About these documents" href="about.html" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Functions" href="functions.html" />
+    <link rel="prev" title="Mathematical Definitions" href="mathematical_definition.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            egamma
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="about.html">About</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mathematical_definition.html">Mathematical Definitions</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Installation and Usage</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#installation">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#usage">Usage</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#quick-calculations">Quick Calculations</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#using-the-egammadistribution-class">Using the EgammaDistribution Class</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#from-a-three-point-estimate">From a three-point estimate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fitting-to-data">Fitting to data</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="functions.html">Functions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="classes.html">Classes</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">egamma</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Installation and Usage</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/usage.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="installation-and-usage">
+<h1>Installation and Usage<a class="headerlink" href="#installation-and-usage" title="Link to this heading"></a></h1>
+<section id="installation">
+<h2>Installation<a class="headerlink" href="#installation" title="Link to this heading"></a></h2>
+<p>To install the egamma library, execute the following command in your terminal:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>egamma
+</pre></div>
+</div>
+<p>This command will download and install the egamma library along with any necessary dependencies.</p>
+</section>
+<section id="usage">
+<h2>Usage<a class="headerlink" href="#usage" title="Link to this heading"></a></h2>
+<p>After installation, import the egamma library into your Python scripts:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">egamma</span>
+</pre></div>
+</div>
+<p>The most common thing to do with this library is to turn a three-point
+estimate into a distribution:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">dist</span> <span class="o">=</span> <span class="n">egamma</span><span class="o">.</span><span class="n">EgammaDistribution</span><span class="o">.</span><span class="n">from_tpe</span><span class="p">(</span><span class="n">low</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">most_likely</span><span class="o">=</span><span class="mi">140</span><span class="p">,</span> <span class="n">high</span><span class="o">=</span><span class="mi">300</span><span class="p">)</span>
+
+<span class="n">dist</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>        <span class="c1"># 189.5</span>
+<span class="n">dist</span><span class="o">.</span><span class="n">ppf</span><span class="p">(</span><span class="mf">0.5</span><span class="p">)</span>      <span class="c1"># median</span>
+<span class="n">dist</span><span class="o">.</span><span class="n">rvs</span><span class="p">(</span><span class="mi">10000</span><span class="p">)</span>    <span class="c1"># a sample for a Monte Carlo run</span>
+</pre></div>
+</div>
+<p>The fitted distribution’s mode is exactly 140, its 10th percentile exactly
+100, and its 90th percentile exactly 300.</p>
+<section id="quick-calculations">
+<h3>Quick Calculations<a class="headerlink" href="#quick-calculations" title="Link to this heading"></a></h3>
+<p>If you already know the parameters, access the library’s functions directly:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Calculate the cumulative probability for x=200</span>
+<span class="n">probability</span> <span class="o">=</span> <span class="n">egamma</span><span class="o">.</span><span class="n">cdf</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">beta</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="n">delta</span><span class="o">=-</span><span class="mi">100</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="using-the-egammadistribution-class">
+<h3>Using the EgammaDistribution Class<a class="headerlink" href="#using-the-egammadistribution-class" title="Link to this heading"></a></h3>
+<p>For a more comprehensive usage, create an instance of the EgammaDistribution class:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Create an EgammaDistribution object with specified parameters</span>
+<span class="n">dist</span> <span class="o">=</span> <span class="n">egamma</span><span class="o">.</span><span class="n">EgammaDistribution</span><span class="p">(</span><span class="n">alpha</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">beta</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="n">delta</span><span class="o">=-</span><span class="mi">100</span><span class="p">)</span>
+<span class="c1"># Calculate the cumulative probability for x=200 using the object's method</span>
+<span class="n">probability</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">cdf</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">200</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="from-a-three-point-estimate">
+<h3>From a three-point estimate<a class="headerlink" href="#from-a-three-point-estimate" title="Link to this heading"></a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">dist</span> <span class="o">=</span> <span class="n">egamma</span><span class="o">.</span><span class="n">EgammaDistribution</span><span class="o">.</span><span class="n">from_tpe</span><span class="p">(</span><span class="n">low</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">most_likely</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+                                          <span class="n">high</span><span class="o">=</span><span class="mi">400</span><span class="p">,</span> <span class="n">low_prob</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">low_prob</span></code> is the probability attached to the low estimate; the high
+estimate takes its complement, <code class="docutils literal notranslate"><span class="pre">1</span> <span class="pre">-</span> <span class="pre">low_prob</span></code>. It must satisfy
+<code class="docutils literal notranslate"><span class="pre">0</span> <span class="pre">&lt;</span> <span class="pre">low_prob</span> <span class="pre">&lt;</span> <span class="pre">0.5</span></code>. The default is 0.1, so the outer values are treated as
+the 10th and 90th percentiles.</p>
+<p>A left-skewed estimate requires nothing special. The position of the mode
+decides the direction:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">dist</span> <span class="o">=</span> <span class="n">egamma</span><span class="o">.</span><span class="n">EgammaDistribution</span><span class="o">.</span><span class="n">from_tpe</span><span class="p">(</span><span class="n">low</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">most_likely</span><span class="o">=</span><span class="mi">300</span><span class="p">,</span> <span class="n">high</span><span class="o">=</span><span class="mi">400</span><span class="p">)</span>
+<span class="k">assert</span> <span class="n">dist</span><span class="o">.</span><span class="n">skew</span><span class="p">()</span> <span class="o">&lt;</span> <span class="mi">0</span>
+</pre></div>
+</div>
+<p>Not every estimate can be fitted. The mode cannot fall outside the interval
+the elicited percentiles enclose, which limits how asymmetric an estimate may
+be: at <code class="docutils literal notranslate"><span class="pre">low_prob=0.1</span></code> the skewness cannot exceed 1.85991 in magnitude. See
+<a class="reference internal" href="mathematical_definition.html"><span class="doc">Mathematical Definitions</span></a> for the bound and how it varies with
+<code class="docutils literal notranslate"><span class="pre">low_prob</span></code>.</p>
+<p>Invalid input raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">egamma</span><span class="o">.</span><span class="n">params</span><span class="p">(</span><span class="mi">300</span><span class="p">,</span> <span class="mi">140</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>      <span class="c1"># ValueError: low above mode</span>
+<span class="n">egamma</span><span class="o">.</span><span class="n">params</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">140</span><span class="p">,</span> <span class="mi">300</span><span class="p">,</span> <span class="mf">0.7</span><span class="p">)</span> <span class="c1"># ValueError: low_prob outside (0, 0.5)</span>
+</pre></div>
+</div>
+<p>A fit that cannot meet its tolerance raises <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> rather than
+returning an unconverged result.</p>
+</section>
+<section id="fitting-to-data">
+<h3>Fitting to data<a class="headerlink" href="#fitting-to-data" title="Link to this heading"></a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Instantiate the distribution from a sample</span>
+<span class="n">dist</span> <span class="o">=</span> <span class="n">egamma</span><span class="o">.</span><span class="n">EgammaDistribution</span><span class="o">.</span><span class="n">from_fit</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">)</span>
+
+<span class="c1"># Or get the parameters directly, choosing the estimator</span>
+<span class="n">alpha</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">delta</span> <span class="o">=</span> <span class="n">egamma</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>                <span class="c1"># maximum likelihood</span>
+<span class="n">alpha</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">delta</span> <span class="o">=</span> <span class="n">egamma</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s1">'mom'</span><span class="p">)</span>  <span class="c1"># method of moments</span>
+</pre></div>
+</div>
+<p>The skew direction is taken from the sample, so both left- and right-skewed
+data are handled.</p>
+<p>Maximum likelihood is the default and is generally the better estimator. The
+method of moments is closed-form and needs no iteration, which makes it useful
+as a starting point or where an optimiser is unavailable, but it rests on the
+sample skewness, whose sampling variance is large, so estimates from small
+samples can depart substantially from the parent distribution. It is the same
+estimator used by the companion Excel library, so results from the two agree.</p>
+<p>For further details, consult the <a class="reference internal" href="functions.html#functions"><span class="std std-ref">Functions</span></a> and <a class="reference internal" href="classes.html#classes"><span class="std std-ref">Classes</span></a> documentation.</p>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="mathematical_definition.html" class="btn btn-neutral float-left" title="Mathematical Definitions" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="functions.html" class="btn btn-neutral float-right" title="Functions" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023-2026, Frode Drevland.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
